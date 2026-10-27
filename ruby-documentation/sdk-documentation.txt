@@ -1,0 +1,894 @@
+================================================================================
+                    SIGNALHOUSE RUBY SDK DOCUMENTATION
+================================================================================
+
+INSTALLATION
+--------------------------------------------------------------------------------
+  gem install signalhouse-sms
+
+  Or add to your Gemfile:
+    gem "signalhouse-sms"
+
+
+INITIALIZATION
+--------------------------------------------------------------------------------
+  require "signalhouse_sms"
+
+  signal_house = SignalHouseSms::Client.new(
+    api_key: "your-api-token",
+    base_url: "https://v2.signalhouse.io"
+  )
+
+  Required options:
+    - api_key   (String)  JWT token or service user token for authentication
+    - base_url  (String)  API base URL
+
+  The SDK raises a SignalHouseSms::ValidationError at initialization if api_key
+  or base_url is missing.
+
+
+PER-REQUEST TOKEN OVERRIDE
+--------------------------------------------------------------------------------
+  Every SDK method accepts an optional "token" keyword argument to override
+  the default api_key for that single request.
+
+  Example:
+    response = signal_house.messages.get_messages(
+      page: 1,
+      limit: 10,
+      token: "user-specific-jwt-token"
+    )
+
+  The per-request token takes precedence over the api_key provided at
+  initialization. The original api_key remains unchanged.
+
+
+CUSTOM HEADERS
+--------------------------------------------------------------------------------
+  Pass additional headers via the "headers" keyword argument:
+
+  Example:
+    response = signal_house.numbers.get_phone_numbers(
+      page: 1,
+      limit: 20,
+      headers: { "X-Request-Id" => "req_abc123" }
+    )
+
+
+IDEMPOTENT REQUESTS
+--------------------------------------------------------------------------------
+  Pass the "idempotency_key" keyword argument to make a create, update or
+  delete safe to retry. The SDK sends it as the Idempotency-Key header. A
+  retry with the same key and the same request replays the first response,
+  marked with the response header Idempotent-Replayed: true, instead of
+  running the request again.
+
+  - Use a new key (a UUID is recommended) for each new operation, and reuse
+    it only to retry that exact request.
+  - Keys are scoped to the authenticated user and kept for 24 hours.
+  - Reusing a key for a different request returns 422; retrying while the
+    first request is still running returns 409 with Retry-After.
+  - The SDK never creates a key for you. GET requests ignore it, and the
+    Voice service does not support it.
+
+  Example:
+    require "securerandom"
+
+    response = signal_house.subgroups.create_subgroup(
+      subgroup_data: { groupId: "G0000001", subgroupName: "Support" },
+      idempotency_key: SecureRandom.uuid
+    )
+
+
+================================================================================
+                          DOMAIN METHOD REFERENCE
+================================================================================
+
+AUTH  (signal_house.auth)
+--------------------------------------------------------------------------------
+  login(email:, password:, token: nil, headers: nil)
+    Login with email and password.
+
+  reset_password(user_id:, new_password:, token: nil, headers: nil)
+    Reset a user's password.
+
+  get_auth_history(group_id: nil, user_id: nil, page: nil, limit: nil,
+      token: nil, headers: nil)
+    Get token login history.
+
+
+BILLING  (signal_house.billing)
+--------------------------------------------------------------------------------
+  get_transaction_history(group_id: nil, subgroup_id: nil,
+      brand_id: nil, campaign_id: nil, entry_type: nil,
+      transaction_type: nil, start_date: nil, end_date: nil,
+      token: nil, headers: nil)
+    Get transaction history with filters.
+
+  get_wallet(group_id: nil, token: nil, headers: nil)
+    Get wallet balance and settings.
+
+  update_wallet(group_id:, auto_recharge_enabled: nil,
+      auto_recharge_threshold: nil, auto_recharge_to_amount: nil,
+      primary_payment_method_id: nil, secondary_payment_method_id: nil,
+      token: nil, headers: nil)
+    Update wallet auto-recharge settings.
+
+  get_payment_methods(group_id: nil, token: nil, headers: nil)
+    List saved payment methods.
+
+  add_funds(group_id:, amount:, payment_method_id:, token: nil,
+      headers: nil)
+    Add funds to wallet. Amount is in microdollars (1,000,000 = $1.00).
+
+  add_payment_method(group_id:, payment_method_id:, token: nil,
+      headers: nil)
+    Save a new payment method.
+
+  remove_payment_method(group_id:, payment_method_id:, token: nil,
+      headers: nil)
+    Remove a saved payment method.
+
+  get_invoice_details(group_id: nil, subgroup_id: nil,
+      start_date: nil, end_date: nil, token: nil, headers: nil)
+    Get invoice/billing details.
+
+  get_fees(group_id: nil, token: nil, headers: nil)
+    Get fee schedule for the group.
+
+
+BRANDS  (signal_house.brands)
+--------------------------------------------------------------------------------
+  get_brands(id: nil, subgroup_id: nil, group_id: nil, page: nil,
+      limit: nil, status: nil, current_toll_free_carrier: nil, token: nil,
+      headers: nil)
+    List brands with filters.
+    current_toll_free_carrier: true, with group_id or subgroup_id, returns only
+    toll-free brands on the group's current toll-free carrier, the ones a new
+    toll-free campaign in that group can use.
+
+  create_brand(brand_data:, token: nil, headers: nil)
+    Create a new 10DLC brand.
+
+  get_business_verification(group_id:, subgroup_id: nil, token: nil,
+      headers: nil)
+    Get a group's business verification: whether its toll-free brands need
+    one, its status and the submitted details.
+    subgroup_id: optional, sent as the subgroupId query parameter only when
+    given, and must then name a subgroup of the group. Some groups verify
+    each subgroup's business separately: a platform whose subgroups are
+    separate businesses, set up by Signal House. For those groups
+    subgroup_id is required. For any other group one business verification
+    covers all of its subgroups, so subgroup_id isn't needed; when given, it
+    is only checked.
+    Returns { groupId, subgroupId, required, status, details, submittedAt,
+    reviewedAt, rejectionReason }; subgroupId is included only when the
+    verification belongs to one subgroup, the subgroup whose business it
+    describes; status is NOT_STARTED, SUBMITTING, IN_REVIEW, VERIFIED or
+    NEEDS_CHANGES; rejectionReason says why it needs changes, or is null.
+    Errors: 400 when the group verifies each subgroup's business separately
+    and subgroup_id is missing; 404 when the subgroup isn't in the group.
+
+  submit_business_verification(group_id:, details:, subgroup_id: nil,
+      token: nil, headers: nil)
+    Submit or update a group's business verification. Allowed when it is not
+    started or needs changes. Review usually takes 1–2 business days; the
+    group's toll-free brands stay pending until it is verified.
+    details: hash with businessName, businessType, industry, registrationType,
+    registrationNumber, website, street, street2 (optional), city, state,
+    postalCode, country ("US" or "CA") and representative (firstName,
+    lastName, email, phone in E.164, jobTitle, jobLevel).
+    subgroup_id: optional, sent as the subgroupId query parameter only when
+    given (the details body is unchanged), and must then name an active
+    subgroup of the group. Some groups verify each subgroup's business
+    separately: a platform whose subgroups are separate businesses, set up
+    by Signal House. For those groups subgroup_id is required, and only that
+    subgroup's toll-free brands follow this verification. For any other
+    group one business verification covers all of its subgroups, so
+    subgroup_id isn't needed; when given, it is only checked.
+    Returns 202: { groupId, subgroupId, required, status, details,
+    submittedAt, reviewedAt, rejectionReason } with status SUBMITTING;
+    subgroupId is included only when the verification belongs to one
+    subgroup, the subgroup whose business it describes.
+    Errors: 400 when the group verifies each subgroup's business separately
+    and subgroup_id is missing; 404 when the subgroup isn't in the group;
+    400 when the subgroup isn't active.
+
+  update_brand(brand_id:, brand_data:, token: nil, headers: nil)
+    Update brand information.
+
+  delete_brand(brand_id:, token: nil, headers: nil)
+    Delete (soft) a brand.
+
+  transfer_brand(subgroup_id:, brand_ids:, token: nil, headers: nil)
+    Transfer brands to a different subgroup.
+
+  get_external_vetting(brand_id:, token: nil, headers: nil)
+    Get external vetting info for a brand.
+
+  create_external_vetting(brand_id:, token: nil, headers: nil)
+    Submit brand for external vetting.
+
+  import_external_vetting(brand_id:, vetting_provider_id:, vetting_id:, vetting_token: nil, token: nil, headers: nil)
+    Import an existing external vetting record (not billable).
+
+  revet_brand(brand_id:, token: nil, headers: nil)
+    Resubmit brand for vetting.
+
+  get_appeal_history(brand_id:, token: nil, headers: nil)
+    List identity status appeals for a brand.
+
+  submit_appeal(brand_id:, appeal_categories:, explanation:, file: nil,
+      token: nil, headers: nil)
+    Submit a brand identity status appeal with supporting documentation.
+    Uses multipart/form-data automatically.
+    appeal_categories: array of strings (VERIFY_TAX_ID, VERIFY_NON_PROFIT, VERIFY_GOVERNMENT)
+    explanation: string (max 1024 chars)
+    file: File object (supported: .jpg, .jpeg, .png, .bmp, .raw, .tiff, .pdf, .docx, .htm, .odt, .rtf, .txt, .xml)
+
+
+CAMPAIGNS  (signal_house.campaigns)
+--------------------------------------------------------------------------------
+  get_campaigns(id: nil, brand_id: nil, subgroup_id: nil,
+      group_id: nil, page: nil, limit: nil, status: nil,
+      token: nil, headers: nil)
+    List campaigns with filters.
+
+  create_campaign(campaign_data:, token: nil, headers: nil)
+    Create a new 10DLC campaign.
+
+  update_campaign(campaign_id:, campaign_data:, token: nil, headers: nil)
+    Update campaign details.
+
+  delete_campaign(campaign_id:, token: nil, headers: nil)
+    Delete (soft) a campaign.
+
+  appeal_dca_rejection(campaign_id:, reason:, token: nil, headers: nil)
+    Appeal a DCA-rejected campaign. The campaign must be in DCA_REJECTED status.
+    Sends a POST to /campaign/appealDcaRejection/:campaignId.
+    reason: string (max 2048 chars)
+    Returns 202: { Message: "Campaign DCA appeal has been queued for processing" }
+
+  nudge_dca_for_campaign(campaign_id:, token: nil, headers: nil)
+    Nudge a connectivity partner to prioritize review of a campaign in PENDING_DCA_APPROVAL status.
+    Sends a POST to /campaign/nudge/:campaignId.
+    No request body required.
+    Returns 200: { message: "Nudge successful" }
+
+
+GROUPS  (signal_house.groups)
+--------------------------------------------------------------------------------
+  get_group(id: nil, token: nil, headers: nil)
+    Get group details by ID.
+
+  update_group(id:, group_data:, token: nil, headers: nil)
+    Update group information.
+
+
+LANDINGS  (signal_house.landings)
+--------------------------------------------------------------------------------
+  get_landings(landing_id: nil, token: nil, headers: nil)
+    Get a landing page by ID.
+
+  get_landing_by_brand_id(brand_id:, token: nil, headers: nil)
+    Get landing page associated with a brand.
+
+  create_landing(landing_data:, file: nil, token: nil, headers: nil)
+    Create a landing page with optional image upload.
+    Uses multipart/form-data automatically.
+
+  update_landing(landing_id:, landing_data:, file: nil, token: nil,
+      headers: nil)
+    Update a landing page with optional image upload.
+    Uses multipart/form-data automatically.
+
+  delete_landing(landing_id:, token: nil, headers: nil)
+    Delete a landing page.
+
+
+MESSAGES  (signal_house.messages)
+--------------------------------------------------------------------------------
+  get_messages(id: nil, campaign_id: nil, brand_id: nil,
+      subgroup_id: nil, group_id: nil, status: nil, direction: nil,
+      message_type: nil, carrier: nil, sentiment_label: nil,
+      error_code: nil, start_date: nil, end_date: nil,
+      sort_field: nil, sort_order: nil, page: nil, limit: nil,
+      token: nil, headers: nil)
+    List messages with extensive filters.
+
+  get_analytics(group_id: nil, subgroup_id: nil, brand_id: nil,
+      campaign_id: nil, registration_id: nil, phone_number: nil, carrier: nil,
+      start_date: nil, end_date: nil, token: nil, headers: nil)
+    Get aggregated message analytics.
+
+  send_sms(sender_phone_number:, recipient_phone_numbers:,
+      message_body:, status_callback_url: nil,
+      enable_shortlink: nil, token: nil, headers: nil)
+    Send an SMS message.
+    Required: sender_phone_number, recipient_phone_numbers, message_body
+
+  send_mms(sender_phone_number:, recipient_phone_numbers:,
+      message_body:, media_urls: nil, status_callback_url: nil,
+      enable_shortlink: nil, enable_compression: nil, images: nil,
+      token: nil, headers: nil)
+    Send an MMS message with media attachments.
+    Uses multipart/form-data automatically.
+    Required: sender_phone_number, recipient_phone_numbers, message_body
+
+  send_group_message(sender_phone_number:, recipient_phone_numbers:,
+      message_body:, media_urls: nil, status_callback_url: nil,
+      enable_shortlink: nil, enable_compression: nil, images: nil,
+      token: nil, headers: nil)
+    Send a group MMS message.
+    Uses multipart/form-data automatically.
+    Required: sender_phone_number, recipient_phone_numbers, message_body
+
+  carrier_id_lookup(phone_number:)
+    Look up the carrier for a phone number.
+    Always performs a fresh lookup (not cached). Billed per request.
+    Required: phone_number (10+ digits, no + prefix)
+    Returns: { phoneNumber, carrier, carrierFamily, carrierRegion, ported, type, degradedConfidence, cost }
+
+
+NOTIFICATIONS  (signal_house.notifications)
+--------------------------------------------------------------------------------
+  get_notifications(id: nil, group_id: nil, page: nil, limit: nil,
+      status: nil, event_types: nil, token: nil, headers: nil)
+    Get notifications with filters.
+
+  update_notification_status(ids:, status:, token: nil, headers: nil)
+    Mark notifications as READ or UNREAD.
+
+  delete_notification(id:, token: nil, headers: nil)
+    Delete a notification.
+
+
+NUMBERS  (signal_house.numbers)
+--------------------------------------------------------------------------------
+  get_phone_numbers(phone_number: nil, campaign_id: nil,
+      registration_id: nil, brand_id: nil, subgroup_id: nil, group_id: nil,
+      page: nil, limit: nil, current_toll_free_carrier: nil, token: nil,
+      headers: nil)
+    List your phone numbers with filters.
+    registration_id: filter to numbers provisioned under this registration.
+    current_toll_free_carrier: true, with group_id or subgroup_id, returns only
+    toll-free numbers from the group's current toll-free carrier, the ones a new
+    toll-free campaign in that group can use.
+
+  get_number_health(phone_number:, token: nil, headers: nil)
+    Get the health score, the same one the portal shows, (1–10) for an owned phone number.
+    Returns sevenDay and thirtyDay breakdowns matching the portal.
+
+  get_available_phone_numbers(sms_enabled: nil, mms_enabled: nil,
+      voice_enabled: nil, country: nil, state: nil, npa: nil, nxx: nil,
+      phone_number: nil, limit: nil, page: nil, token: nil, headers: nil)
+    Search available numbers for purchase.
+
+  purchase_phone_number(phone_numbers:, subgroup_id:, token: nil,
+      headers: nil)
+    Purchase one or more phone numbers.
+
+  update_phone_number(phone_number:, update_data:, token: nil,
+      headers: nil)
+    Update phone number details (e.g., friendly name).
+
+  get_caller_name(phone_number:, token: nil, headers: nil)
+    Get the number's outbound caller name (GET /number/:phoneNumber/cnam).
+    Returns { phoneNumber, cnam, autoApply, eligible, ineligibleReason }.
+
+  set_caller_name(phone_number:, name:, brand_id: nil, token: nil,
+      headers: nil)
+    Set the number's outbound caller name (PUT /number/:phoneNumber/cnam).
+    brand_id only for numbers with no campaign; sent only when provided.
+
+  delete_caller_name(phone_number:, token: nil, headers: nil)
+    Remove the number's own caller name (DELETE /number/:phoneNumber/cnam);
+    falls back to the auto-applied name if the subgroup has auto-apply on.
+
+  assign_phone_number_to_campaign(campaign_id:, phone_numbers:,
+      token: nil, headers: nil)
+    Assign numbers to a campaign.
+
+  unassign_phone_numbers_from_campaigns(phone_numbers:, token: nil,
+      headers: nil)
+    Unassign numbers from their campaigns.
+
+  delete_phone_numbers(phone_numbers:, token: nil, headers: nil)
+    Release phone numbers.
+
+  transfer_phone_numbers(phone_numbers:, new_subgroup_id:, token: nil,
+      headers: nil)
+    Transfer unassigned numbers between subgroups.
+
+  search_npa_nxx(country: nil, state: nil, city: nil, npa: nil,
+      nxx: nil, token: nil, headers: nil)
+    Search NPA/NXX area code lookup data.
+
+  lookup_locations(entries:, token: nil, headers: nil)
+    Batch lookup city/state for NPA/NXX pairs.
+    entries: [{ npa: "213", nxx: "555" }, ...]
+
+  port_in_phone_number(number_data:, **opts)
+    Submit a port-in request (POST /number/portin).
+    number_data: hash containing port-in request data (required).
+
+  get_port_requests(group_id: nil, phone_number: nil, status: nil,
+      page: nil, limit: nil, exclude_documents: nil, **opts)
+    Get port-in requests with optional filters (GET /number/portin).
+    All parameters are optional. exclude_documents: true leaves signatureUrl
+    and billingUrl out of each request.
+
+
+SHORTLINKS  (signal_house.shortlinks)
+--------------------------------------------------------------------------------
+  get_shortlink(shortlink_id: nil, message_id: nil,
+      phone_number: nil, campaign_id: nil, brand_id: nil,
+      subgroup_id: nil, group_id: nil, page: nil, limit: nil,
+      token: nil, headers: nil)
+    Get shortlink details and click data.
+
+  get_shortlink_redirect(shortlink_id:, token: nil, headers: nil)
+    Get the redirect URL for a shortlink.
+
+  get_opt_out(code:, token: nil, headers: nil)
+    Public, no auth. GET /shortlink/optout/:code for the alphanumeric-sender
+    opt-out link (sihou.io/o/{code}): { code, senderName, maskedRecipient,
+    optedOut }; 404 for an unknown code.
+
+  confirm_opt_out(code:, token: nil, headers: nil)
+    Public, no auth. POST /shortlink/optout/:code (no body) opts the recipient
+    out; idempotent. Returns { code, senderName, maskedRecipient, optedOut: true };
+    404 for an unknown code.
+
+
+SUBGROUPS  (signal_house.subgroups)
+--------------------------------------------------------------------------------
+  get_subgroups(id: nil, group_id: nil, page: nil, limit: nil,
+      token: nil, headers: nil)
+    List subgroups with filters.
+
+  create_subgroup(subgroup_data:, token: nil, headers: nil)
+    Create a new subgroup.
+    subgroup_data may include optional carrierIdFamily and carrierIdRegion.
+    Setting carrierIdFamily or carrierIdRegion requires signalhouse_api,
+    signalhouse_admin, signalhouse_user, api, admin, developer, or billing role.
+
+  update_subgroup(id:, update_data:, token: nil, headers: nil)
+    Update subgroup details.
+    update_data may include optional carrierIdFamily and carrierIdRegion.
+    Setting carrierIdFamily or carrierIdRegion requires signalhouse_api,
+    signalhouse_admin, signalhouse_user, api, admin, developer, or billing role.
+    update_data may also include cnamAutoApply (boolean) and cnamBrandId (string
+    or nil) for caller name auto-apply. Setting them requires signalhouse_api,
+    signalhouse_admin, signalhouse_user, api, admin, or developer role.
+
+  delete_subgroup(id:, token: nil, headers: nil)
+    Delete (deactivate) a subgroup.
+
+
+SUBSCRIPTIONS  (signal_house.subscriptions)
+--------------------------------------------------------------------------------
+  get_subscriptions(group_id: nil, only_active: nil, token: nil,
+      headers: nil)
+    Get subscription history for a group.
+
+  subscribe(group_id:, template_id:, token: nil, headers: nil)
+    Subscribe a group to a plan.
+
+  unsubscribe(group_id:, token: nil, headers: nil)
+    Unsubscribe a group from their current plan.
+
+
+USERS  (signal_house.users)
+--------------------------------------------------------------------------------
+  get_users(id: nil, group_id: nil, user_type: nil, token: nil,
+      headers: nil)
+    List users with filters.
+
+  create_user(data:, token: nil, headers: nil)
+    Create a new user.
+
+  create_service_user(data:, token: nil, headers: nil)
+    Create a service user (API key). Optional allowedIps (IPs/CIDRs) and
+    allowedCountries (ISO 3166-1 alpha-2) restrict where a customer key is accepted from.
+    allowedDestinationCountries (ISO 3166-1 alpha-2) limits the countries it can send
+    messages to; a send to any other country is rejected with 403 DESTINATION_COUNTRY_NOT_ALLOWED.
+
+  update_user(id:, data:, token: nil, headers: nil)
+    Update user information. For a customer API key, allowedIps / allowedCountries /
+    allowedDestinationCountries replace its restrictions ([] removes one); needs an interactive admin/developer session.
+
+  delete_user(id:, token: nil, headers: nil)
+    Delete (deactivate) a user.
+
+  get_notification_preferences(id:, token: nil, headers: nil)
+    Get user notification preferences.
+
+  update_notification_preferences(id:, notification_preferences:,
+      token: nil, headers: nil)
+    Update notification preferences.
+
+
+WEBHOOKS  (signal_house.webhooks)
+--------------------------------------------------------------------------------
+  get_webhooks(id: nil, group_id: nil, endpoint_type: nil,
+      phone_number: nil, page: nil, limit: nil, token: nil, headers: nil)
+    List webhooks with filters.
+
+  create_webhook(webhook_data:, token: nil, headers: nil)
+    Create a new webhook.
+
+  update_webhook(id:, update_data:, token: nil, headers: nil)
+    Update webhook configuration, including authType, apiHeaderPrefix and credentials
+    (changed in place). Responses carry hasSigningSecret/hasCredentials, never secrets.
+
+  rotate_webhook_secret(id:, grace_seconds: nil, token: nil, headers: nil)
+    Rotate the signing secret (or create a first one for an older webhook). Returns the new
+    signingSecret once; the old secret keeps working for graceSeconds (default 24h, max 7 days).
+
+  delete_webhook(id:, token: nil, headers: nil)
+    Delete a webhook.
+
+
+================================================================================
+                          MULTIPART REQUESTS
+================================================================================
+
+  The following methods use multipart/form-data automatically:
+
+    - signal_house.messages.send_mms(...)
+    - signal_house.messages.send_group_message(...)
+    - signal_house.landings.create_landing(...)
+    - signal_house.landings.update_landing(...)
+    - signal_house.brands.submit_appeal(...)
+
+  You do not need to construct multipart form data manually. Pass parameters
+  as normal keyword arguments and the SDK builds the form data internally.
+
+
+================================================================================
+                          QUERY STRING HELPERS
+================================================================================
+
+  The SDK automatically constructs query strings from method parameters.
+  Any parameter with a nil value is excluded, so you only need to pass
+  the filters you care about.
+
+  Example:
+    # Only sends ?status=FAILED&page=1&limit=50
+    messages = signal_house.messages.get_messages(
+      status: "FAILED",
+      group_id: nil,     # excluded
+      direction: nil,    # excluded
+      page: 1,
+      limit: 50
+    )
+
+
+================================================================================
+                             VALIDATION
+================================================================================
+
+  The SDK validates required parameters client-side before making any HTTP
+  request. If a required parameter is missing, nil, or an empty string,
+  the SDK raises a SignalHouseSms::ValidationError immediately -- no network
+  request is made.
+
+  Validation errors have:
+    - Class:   SignalHouseSms::ValidationError
+    - Message: "Missing required parameter: <field_name>"
+    - status:  400
+
+
+================================================================================
+                           ERROR HANDLING
+================================================================================
+
+  The SDK uses a standardized response format. Errors are NOT raised --
+  they are returned as hashes with "success" => false.
+
+  Success response:
+    { "success" => true, "data" => { ... }, "status" => 200 }
+
+  Error response:
+    { "success" => false, "error" => "Error message", "status" => 400 }
+
+  Error types summary:
+
+    Source                    Behavior                              How to Handle
+    ---------------------------------------------------------------------------
+    Missing required param    Raises SignalHouseSms::ValidationError   rescue
+    HTTP 4xx/5xx from API     Returns { "success" => false, ... }  Check response["success"]
+    Network failure           Returns { "success" => false, ... }  Check response["success"]
+
+
+================================================================================
+                       COMPLETE INTEGRATION EXAMPLE
+================================================================================
+
+  require "sinatra"
+  require "sinatra/json"
+  require "signalhouse_sms"
+
+  signal_house = SignalHouseSms::Client.new(
+    api_key: ENV["SIGNALHOUSE_API_KEY"],
+    base_url: "https://v2.signalhouse.io"
+  )
+
+  # Send an SMS notification
+  post "/api/notify" do
+    data = JSON.parse(request.body.read)
+
+    begin
+      response = signal_house.messages.send_sms(
+        sender_phone_number: data["senderNumber"],
+        recipient_phone_numbers: [data["recipientNumber"]],
+        message_body: data["message"],
+        status_callback_url: "#{ENV['BASE_URL']}/api/delivery-status"
+      )
+
+      unless response["success"]
+        halt(response["status"] || 500, json(error: response["error"]))
+      end
+
+      json(
+        messageId: response["data"]["messageId"],
+        status: response["data"]["status"]
+      )
+    rescue SignalHouseSms::ValidationError => e
+      halt 400, json(error: e.message)
+    rescue => e
+      halt 500, json(error: "Internal server error")
+    end
+  end
+
+  # Receive delivery status callbacks
+  post "/api/delivery-status" do
+    data = JSON.parse(request.body.read)
+    puts "Message #{data['messageId']} status: #{data['status']}"
+    json(received: true)
+  end
+
+  # List phone numbers with per-request token override
+  get "/api/numbers" do
+    user_token = request.env["HTTP_AUTHORIZATION"]&.sub("Bearer ", "")
+
+    response = signal_house.numbers.get_phone_numbers(
+      page: (params[:page] || 1).to_i,
+      limit: (params[:limit] || 20).to_i,
+      token: user_token
+    )
+
+    unless response["success"]
+      halt(response["status"] || 500, json(error: response["error"]))
+    end
+
+    json response["data"]
+  end
+
+  # Get message analytics
+  get "/api/analytics" do
+    response = signal_house.messages.get_analytics(
+      start_date: params[:startDate],
+      end_date: params[:endDate],
+      campaign_id: params[:campaignId]
+    )
+
+    unless response["success"]
+      halt(response["status"] || 500, json(error: response["error"]))
+    end
+
+    json response["data"]
+  end
+
+
+REGISTRATIONS AND REGIONAL REPORTING
+--------------------------------------------------------------------------------
+A registration is what a jurisdiction (or its provider) requires before a sender
+may message. One model covers every jurisdiction: `region` is the jurisdiction
+(US, GB, CA, AU; any case of "UK"/"GB"/"GBR"/"United Kingdom" is accepted for GB) and `type` selects the shape of `data`.
+Types: TEN_DLC_BRAND, TEN_DLC_CAMPAIGN, TOLL_FREE_BRAND, TOLL_FREE_CAMPAIGN,
+SHORT_CODE_BRAND, SHORT_CODE_PROGRAM, SHORT_CODE_LEASE (not available), VIRTUAL_LONG_CODE (UK) and ALPHANUMERIC_SENDER_ID (UK). Kinds: identity, program, sender. Channels: tenDLC, tollFree,
+shortCode, virtualLongCode, alphanumeric.
+
+Start with the catalog. GET /registration/catalog?region= returns {region,
+jurisdiction, sendingRequiresRegistration, registeredThrough, provisioning, types:[{type, kind,
+channel, provider, bundles, quantity:{min,max}, requiresParent, available}]}.
+registeredThrough is "registration" (use this API), "brandsAndCampaigns" (the US:
+register through the Brands and Campaigns APIs) or null (nothing to register, e.g.
+Canada). An unlisted country requires registration and offers no types.
+Quote and submit only a type whose `available` is true; other types answer 400.
+
+GET /registration/quotes?region=&type=&quantity= (1-100, default 1) returns
+{data:[quotes]}, one quote per capability bundle: {capabilities, quantity,
+currency, setupAmount, monthlyAmount, totalSetupAmount, totalMonthlyAmount,
+etaDays}. Amounts are integer microdollars; setupAmount/monthlyAmount are per
+sender and the totals cover the quantity. groupId is optional and staff-only.
+
+Submit on POST /registration (201) with region, type, subgroupId,
+capabilities (one of the type's bundles) and data. Set idempotency_key: to make a
+retry safe (see IDEMPOTENT REQUESTS). Worked example, UK Virtual Long Code: type "VIRTUAL_LONG_CODE",
+capabilities ["SMS"] or ["SMS","VOICE"], data {quantity (1-100), useCases (1-10
+strings), voice?}. The voice dossier is required exactly when capabilities
+include VOICE: companyName, companyPhone, companyWebsite, companyEmail,
+address {line1,line2?,city,postalCode,country}, companyDescription,
+campaignName, campaignDescription, optInMethods (WEB|KEYWORD|VERBAL),
+optOutKeywords (STOP and UNSUBSCRIBE), callTypes (LANDLINE|LOCAL|INTERNATIONAL),
+callsPerDay (1-5), callDurationMinutes (1-10, 15, 30, 45 or 60) and termsUrl.
+
+Worked example, UK alphanumeric sender ID: region "GB", type
+"ALPHANUMERIC_SENDER_ID", capabilities ["SMS"], data {requestedSenderId (3-11
+letters, digits, spaces, dots or dashes; at least one letter), trafficOrigin
+(LOCAL: headquartered in the UK | INTERNATIONAL), trafficType (TRANSACTIONAL |
+PROMOTIONAL), companyName, companyCountry, companyWebsite (http/https), industry,
+messageExample, senderRelationship? (required when requestedSenderId differs from
+companyName)}. quantity is always 1; the quote is one ["SMS"] bundle, 6000000
+setup and 6000000 monthly by default. Once the registration is APPROVED,
+data.phoneNumbers holds the granted sender (e.g. ["ACME"]); pass it as the sender
+to send SMS to UK recipients. The server appends "\nOpt out: sihou.io/o/{code}"
+to every message from it, counted in segments and in the estimate.
+
+GET /registration accepts groupId, subgroupId, region, type, kind, status,
+parentRegistrationId, phoneNumber (filter to registrations holding this phone
+number), sortBy (createdAt (default), subgroupId, registrationId, region or
+status), sortOrder (asc or desc (default)), page and limit (max 100) and returns
+{data,totalCount,page,limit}.
+Region and status each take one value or a list (String or Array; an Array is
+sent comma-separated, e.g. status=PENDING_PROVIDER,APPROVED).
+GET /registration/:registrationId returns
+{registrationId, groupId, subgroupId, region, type, kind, channel, provider,
+externalId, parentRegistrationId, status, stage, capabilities, submittedAt,
+approvedAt, expiresAt, review:{decision,reviewedAt,reason}, data:{...type
+fields}, history:[{status,stage,actor,actorType,timestamp,reason}], createdAt,
+updatedAt}. For VIRTUAL_LONG_CODE, data also carries phoneNumbers, the numbers
+allocated so far. Statuses: DRAFT, SIGNAL_HOUSE_REVIEW, SIGNAL_HOUSE_APPROVED,
+SIGNAL_HOUSE_REJECTED, SUBMITTING, PENDING_PROVIDER, NEEDS_INFORMATION,
+PAYMENT_REQUIRED (the setup fee could not be funded; retried hourly), APPROVED,
+REJECTED, CANCELLED, PENDING_DELETE, DELETED, EXPIRED, RECONCILIATION_REQUIRED.
+`stage` is the provider's step inside a status. Never send from a sender whose
+registration is not APPROVED.
+
+DELETE /registration/:registrationId cancels a registration (roles api, admin,
+developer, user). Allowed from SIGNAL_HOUSE_REVIEW, SIGNAL_HOUSE_APPROVED,
+PENDING_PROVIDER, NEEDS_INFORMATION, PAYMENT_REQUIRED and APPROVED (409
+otherwise). Numbers already allocated stay on the account and stop sending.
+
+Staff only (the admin namespace exists only when the client enables admin, and
+enabling it grants no server permission):
+POST /:registrationId/review {action:"APPROVE"|"REJECT",reason?}; REJECT needs reason.
+POST /:registrationId/corrections {reason,data} saves the type's correctable
+fields (VIRTUAL_LONG_CODE: useCases, voice?) while the provider waits; owner,
+quantity, bundle and provider order are fixed.
+POST /:registrationId/numbers {phoneNumber} allocates a provider-owned number
+through the recovery path.
+POST /:registrationId/reconcile {externalId} links the provider order that was
+placed after an ambiguous submission; never place a second order to retry.
+GET /:registrationId/application?format=json returns {filename,contentType,base64};
+decode base64 before saving the document.
+
+Regional reporting: GET /message, /message/analytics, /message/analytics/detail,
+/message/analytics/by-subgroup, /message/analytics/by-error-code, /message/dnc and
+/message/dnc/analytics accept region and regionScopes; GET
+/message/analytics/filter-options accepts region only. region is US, GB or CA
+(any case of "UK"/"GB"/"GBR"/"United Kingdom" is accepted for GB) as a single value, a repeated parameter or a CSV.
+regionScopes is a JSON array of OR-ed branches {region, channels, brandId?,
+campaignId?, phoneNumber?} with channels from tenDLC, virtualLongCode, tollFree,
+shortCode and p2p; [] matches nothing and omitting both keeps the existing scope.
+Example:
+[{"region":"US","channels":["tenDLC"],"brandId":["BUS1"]},
+ {"region":"GB","channels":["virtualLongCode"],"phoneNumber":["447400123456"]}]
+GET /message always accepts them; the analytics and DNC reads accept them only
+where the environment serves hourly analytics and reject them with a 400 elsewhere.
+
+get_analytics, get_analytics_detail, get_analytics_throughput and
+get_dnc_analytics accept registration_id (a single id or an array, sent comma-
+joined like campaign_id): filter to traffic attributed to these registrations
+(hourly analytics only; a 400 while hourly reads are off). Except on
+get_analytics_throughput, which has no phoneNumber filter, a phoneNumber filter
+takes precedence. get_phone_numbers accepts a single registration_id to list the
+numbers provisioned under that registration.
+
+get_analytics_by_subgroup, get_analytics_by_error_code and get_dnc_records accept
+registration_id the same way, with the same hourly-only rule and precedence.
+get_messages accepts registration_id in every environment: it filters to messages
+attributed to those registrations, and a phone_number filter narrows further. Every
+method returns 400 when registration_id is combined with campaign_id.
+
+get_analytics_filter_options returns each phone number with its type (TOLL_FREE,
+SHORT_CODE, ALPHANUMERIC, VIRTUAL_LONG_NUMBER, and older local-number spellings) and
+country (ISO-2), null when unknown. TOLL_FREE, SHORT_CODE and ALPHANUMERIC are channels
+by type; a US number of any other type is 10DLC and a non-US one is a Virtual Long Code.
+It also returns carriers, a plain array of carrier name strings.
+
+UK sending is SMS only, from a +44 virtual long code to GB mobile recipients; MMS
+and group MMS are unavailable. POST /message/estimate accepts a +44 sender
+(recipients 10-15 digits) and returns region "GB", or "CA" for a Canadian sender.
+A READY alphanumeric sender ID (e.g. "ACME") also sends SMS to UK recipients only;
+its estimate includes the opt-out footer.
+
+LANGUAGE EXAMPLE
+  catalog = signal_house.registrations.get_catalog(region: "GB")
+  quotes = signal_house.registrations.get_quotes(region: "GB", type: "VIRTUAL_LONG_CODE", quantity: 1)
+  signal_house.registrations.create_registration(registration_data: {
+    region: "GB", type: "VIRTUAL_LONG_CODE", subgroupId: "SGEXAMPLE",
+    capabilities: ["SMS"],
+    data: { quantity: 1, useCases: ["Support"] }
+  })
+  # UK alphanumeric sender ID
+  signal_house.registrations.get_quotes(region: "GB", type: "ALPHANUMERIC_SENDER_ID")
+  signal_house.registrations.create_registration(registration_data: {
+    region: "GB", type: "ALPHANUMERIC_SENDER_ID", subgroupId: "SGEXAMPLE",
+    capabilities: ["SMS"],
+    data: { requestedSenderId: "ACME", trafficOrigin: "LOCAL", trafficType: "TRANSACTIONAL",
+            companyName: "Acme", companyCountry: "United Kingdom", companyWebsite: "https://acme.example",
+            industry: "Retail", messageExample: "Your Acme order has shipped." }
+  })
+  signal_house.registrations.get_registration(registration_id: "REG2") # poll until APPROVED; data.phoneNumbers is ["ACME"]
+  signal_house.messages.send_sms(sender_phone_number: "ACME", recipient_phone_numbers: ["447400123456"],
+    message_body: "Your Acme order has shipped.")
+  signal_house.registrations.get_registrations(region: "GB", status: "PENDING_PROVIDER")
+  signal_house.registrations.get_registration(registration_id: "REG1")
+  signal_house.registrations.cancel_registration(registration_id: "REG1")
+  signal_house.registrations.admin.review_registration(registration_id: "REG1", action: "APPROVE") # enable_admin: true
+  signal_house.messages.get_messages(region: %w[US GB],
+    region_scopes: [{ region: "GB", channels: ["virtualLongCode"] }])
+  signal_house.messages.get_analytics_filter_options(group_id: "G1", region: "GB")
+
+
+MESSAGE TEMPLATES
+--------------------------------------------------------------------------------
+Versioned, raw message templates. One namespace, templates, on
+/template. list takes an optional channel filter; create
+reads the channel from the body it is given. Every call answers 404 while the
+environment's RCS switch is off. Every call carries groupId: GET in the query
+string, JSON writes in the body, the media upload as a form field.
+
+A template has a head {templateId, groupId, channel, name, tag,
+archivedAt, draftVersion, publishedVersion, revision,
+createdBy, createdAt, updatedAt} and numbered versions
+{version, state (DRAFT|PUBLISHED), body, contentHash, publishedAt, ...}. Reads
+of one template return {head, version}; lists return {data, total, page, limit}
+with summaries that add state and hasUnpublishedChanges.
+
+create creates draft version 1 from name (1-120 chars, unique per
+group and channel), body and optional tag (201). get takes version: a
+number, "draft" or "published"; omitted reads the published version, else the
+draft, and an explicit selector never falls back (404). update saves the
+draft from name, tag and body; writes apply directly (last write wins). Leave tag:
+out to keep it; pass tag: nil to clear it. The 409 codes are TEMPLATE_ARCHIVED,
+TEMPLATE_NAME_TAKEN, NO_DRAFT and DRAFT_CHANGED. publish always publishes the
+current draft; no draft answers 409 {code:"NO_DRAFT"}, a draft that changed while
+it was being published 409 {code:"DRAFT_CHANGED"} (publish again), and an
+incomplete draft 400 {code:"TEMPLATE_INVALID", errors, warnings}. archive takes only groupId. validate checks
+exactly one of body or version and never writes. capabilities returns the
+server's block kinds, action types, limits and media rules, and with provider
+(infobip|sinch) that provider's limits and unsupported features.
+upload_media sends multipart fields file and groupId and returns
+{mediaId, url, bytes, mimeType, kind, width, height, ...} (201).
+
+The body is the raw RcsTemplateBody {channel:"rcs", contentFormat:"rcs.blocks.v1",
+content:{blocks}, variables, defaults, fallback}; the SDK sends it unchanged and
+offers no conversion, duplication or starter helpers. Unknown keys are rejected.
+Placeholders are {{key}}; {{sender_name}} is reserved. Writes accept an
+idempotency key. Reads (including validate and capabilities) need
+admin, developer, api, billing or user; writes need admin, developer or api.
+
+LANGUAGE EXAMPLE
+  body = {
+    channel: "rcs", contentFormat: "rcs.blocks.v1",
+    content: { blocks: [{ id: "b1", kind: "text", text: "Hi {{first_name}}" }] },
+    variables: [{ key: "first_name", type: "text", required: true }]
+  }
+  created = signal_house.templates.create(group_id: "G1", name: "Welcome", body: body,
+                                          idempotency_key: SecureRandom.uuid)
+  head = created["data"]["head"]
+  signal_house.templates.update(template_id: head["templateId"], group_id: "G1",
+    tag: nil) # nil clears the tag; leave it out to keep it
+  signal_house.templates.validate(template_id: head["templateId"], group_id: "G1", version: "draft")
+  signal_house.templates.publish(template_id: head["templateId"], group_id: "G1")
+  signal_house.templates.list(group_id: "G1", channel: "rcs", state: "PUBLISHED")
+  signal_house.templates.capabilities(group_id: "G1", provider: "infobip")
+  File.open("hero.png", "rb") do |image|
+    signal_house.templates.upload_media(group_id: "G1",
+      file: { filename: "hero.png", io: image, content_type: "image/png" })
+  end

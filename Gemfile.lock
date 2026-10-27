@@ -1,0 +1,21 @@
+PATH
+  remote: .
+  specs:
+    signalhouse-sms (0.0.0)
+
+GEM
+  remote: https://rubygems.org/
+  specs:
+
+PLATFORMS
+  arm64-darwin-25
+  ruby
+
+DEPENDENCIES
+  signalhouse-sms!
+
+CHECKSUMS
+  signalhouse-sms (0.0.0)
+
+BUNDLED WITH
+  4.0.16
