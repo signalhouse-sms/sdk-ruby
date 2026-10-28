@@ -310,12 +310,15 @@ module SignalHouseSms
 
       # POST /number/portin/:id/approve
       # Approve a port-in request (admin only).
-      def approve_port_request(porting_id:, **opts)
+      # @param sub_group_id [String, nil] Subgroup to assign when the request has none yet. Ignored
+      #   if the request already has a subgroup assigned -- an existing assignment is never overwritten.
+      def approve_port_request(porting_id:, sub_group_id: nil, **opts)
         @client.require_params("portingId" => porting_id)
         token = opts[:token]
         headers = HttpClient.headers_for(opts)
         safe_id = CGI.escape(porting_id.to_s)
-        @client.request("/number/portin/#{safe_id}/approve", method: :post, token: token, headers: headers)
+        body = sub_group_id.nil? ? nil : { subGroupId: sub_group_id }
+        @client.request("/number/portin/#{safe_id}/approve", method: :post, body: body, token: token, headers: headers)
       end
 
       # GET /number/short-code/requests — list campaign-bound Short Code acquisition requests.

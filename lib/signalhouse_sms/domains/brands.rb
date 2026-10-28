@@ -11,6 +11,7 @@ module SignalHouseSms
 
     # GET /brand?... — brandId may be null until carrier assignment; poll by record _id.
     # registration_type optionally filters by "TEN_DLC", "TOLL_FREE", or "SHORT_CODE".
+    # Each brand carries `carrierSuspensions` (carrier brand suspension rules; active while liftedAt is null).
     # current_toll_free_carrier: true, with group_id or subgroup_id, returns only toll-free brands on the group's
     # current toll-free carrier, the ones a new toll-free campaign in that group can use.
     def get_brands(id: nil, subgroup_id: nil, group_id: nil, page: nil, limit: nil, status: nil, registration_type: nil, current_toll_free_carrier: nil, **opts)
@@ -46,6 +47,13 @@ module SignalHouseSms
     # E.164 with an optional leading "+" and no spaces, parentheses or hyphens (e.g. "17025550100").
     # For Toll-Free, brandId is a
     # TFNB-prefixed id when assigned; otherwise null — poll by record _id.
+    #
+    # tollFree.businessVerificationId names the business verification the brand uses (starts with BV). A group whose
+    # toll-free brands need a business verification must send a VERIFIED one of the brand's group (in a group that
+    # verifies each subgroup's business separately, of the brand's subgroup); any other group gets 400 if it sends one.
+    # With it, the legal fields (companyName, street, city, state, postalCode, country, firstName, lastName and
+    # tollFree's businessRegistrationType, taxId, countryCode and taxIdIssuingCountry) are optional: the business
+    # verification's values replace any that are sent. It can't be changed after creation.
     def create_toll_free_brand(brand_data:, **opts)
       @client.require_params("brandData" => brand_data)
       token = opts[:token]
@@ -54,9 +62,9 @@ module SignalHouseSms
     end
 
     # GET /brand/business-verification/:groupId?subgroupId=...
-    # Get a group's business verification: whether its toll-free brands need one, its status and the submitted details.
+    # List a group's business verifications, newest first, and whether its toll-free brands need one (required).
     # subgroup_id is sent only when given. A group that verifies each subgroup's business separately requires it.
-    def get_business_verification(group_id:, subgroup_id: nil, **opts)
+    def get_business_verifications(group_id:, subgroup_id: nil, **opts)
       @client.require_params("groupId" => group_id)
       token = opts[:token]
       headers = HttpClient.headers_for(opts)
@@ -65,18 +73,40 @@ module SignalHouseSms
       @client.request("/brand/business-verification/#{safe_group_id}#{qs}", method: :get, token: token, headers: headers)
     end
 
-    # PUT /brand/business-verification/:groupId?subgroupId=...
-    # Submit or update a group's business verification. Allowed when it is not started or needs changes.
-    # Review usually takes 1–2 business days; the group's toll-free brands stay pending until it is verified.
-    # subgroup_id is sent only when given and must name an active subgroup of the group. A group that verifies each
-    # subgroup's business separately requires it.
-    def submit_business_verification(group_id:, details:, subgroup_id: nil, **opts)
+    # GET /brand/business-verification/:groupId/:businessVerificationId
+    # Get one of a group's business verifications by its ID, plus required. 404 when it isn't one of the group's.
+    def get_business_verification(group_id:, business_verification_id:, **opts)
+      @client.require_params("groupId" => group_id, "businessVerificationId" => business_verification_id)
+      token = opts[:token]
+      headers = HttpClient.headers_for(opts)
+      safe_group_id = CGI.escape(group_id.to_s)
+      safe_business_verification_id = CGI.escape(business_verification_id.to_s)
+      @client.request("/brand/business-verification/#{safe_group_id}/#{safe_business_verification_id}", method: :get, token: token, headers: headers)
+    end
+
+    # POST /brand/business-verification/:groupId?subgroupId=...
+    # Create and submit a new business verification. Review usually takes 1–2 business days; once it is VERIFIED, a new
+    # toll-free brand can use it as tollFree.businessVerificationId. subgroup_id is sent only when given and must name an
+    # active subgroup of the group. A group that verifies each subgroup's business separately requires it.
+    def create_business_verification(group_id:, details:, subgroup_id: nil, **opts)
       @client.require_params("groupId" => group_id, "details" => details)
       token = opts[:token]
       headers = HttpClient.headers_for(opts)
       safe_group_id = CGI.escape(group_id.to_s)
       qs = @client.get_query_string(subgroupId: subgroup_id)
-      @client.request("/brand/business-verification/#{safe_group_id}#{qs}", method: :put, body: details, token: token, headers: headers)
+      @client.request("/brand/business-verification/#{safe_group_id}#{qs}", method: :post, body: details, token: token, headers: headers)
+    end
+
+    # PUT /brand/business-verification/:groupId/:businessVerificationId
+    # Correct and resubmit a business verification. Allowed only while it needs changes (400 otherwise); the toll-free
+    # brands that use it stay pending until it is verified.
+    def update_business_verification(group_id:, business_verification_id:, details:, **opts)
+      @client.require_params("groupId" => group_id, "businessVerificationId" => business_verification_id, "details" => details)
+      token = opts[:token]
+      headers = HttpClient.headers_for(opts)
+      safe_group_id = CGI.escape(group_id.to_s)
+      safe_business_verification_id = CGI.escape(business_verification_id.to_s)
+      @client.request("/brand/business-verification/#{safe_group_id}/#{safe_business_verification_id}", method: :put, body: details, token: token, headers: headers)
     end
 
     # GET /brand/toll-free-isv-account/:groupId — get a group's toll-free ISV account, its own parent account at the

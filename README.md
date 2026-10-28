@@ -2,6 +2,8 @@
 
 Official Ruby SDK for the [SignalHouse](https://signalhouse.io) SMS/MMS messaging API.
 
+Full API reference and guides: https://app2.signalhouse.io/docs
+
 ## Installation
 
 Add to your Gemfile:
@@ -145,19 +147,21 @@ result = client.brands.create_brand(
 puts result
 ```
 
-### Check a Toll-Free Business Verification
+### List Toll-Free Business Verifications
 
-When `required` is true and `status` is `NOT_STARTED`, submit the business verification with `submit_business_verification` before creating the group's first toll-free brand. Some groups verify each subgroup's business separately: a platform whose subgroups are separate businesses, set up by Signal House. For those groups `subgroup_id` is required, on both methods, and the response includes `subgroupId`.
+When `required` is true, each new toll-free brand names a `VERIFIED` business verification as `tollFree.businessVerificationId`; add one with `create_business_verification`. Some groups verify each subgroup's business separately: a platform whose subgroups are separate businesses, set up by Signal House. For those groups `subgroup_id` is required, on both methods, and the response includes `subgroupId`.
 
 ```ruby
-result = client.brands.get_business_verification(
+result = client.brands.get_business_verifications(
   group_id: "G0000001",
   subgroup_id: "SG000001", # required when the group verifies each subgroup's business separately
   token: "your-jwt-token"
 )
 
 if result["success"]
-  puts result["data"]["status"]
+  result["data"]["businessVerifications"].each do |verification|
+    puts "#{verification['businessVerificationId']}: #{verification['status']}"
+  end
 end
 ```
 
@@ -220,7 +224,7 @@ client.users.admin.create_internal_user(
 |--------|----------|---------|
 | Auth | `client.auth` | `login`, `reset_password`, `get_auth_history` |
 | Billing | `client.billing` | `get_transaction_history`, `get_wallet`, `update_wallet`, `get_payment_methods`, `add_funds`, `add_payment_method`, `remove_payment_method`, `get_invoice_details`, `get_fees` |
-| Brands | `client.brands` | `get_brands`, `get_external_vetting`, `create_brand`, `get_business_verification`, `submit_business_verification`, `get_toll_free_isv_account` (staff only), `set_toll_free_isv_account` (staff only), `transfer_brand`, `create_external_vetting`, `update_brand`, `revet_brand`, `delete_brand` |
+| Brands | `client.brands` | `get_brands`, `get_external_vetting`, `create_brand`, `get_business_verifications`, `get_business_verification`, `create_business_verification`, `update_business_verification`, `get_toll_free_isv_account` (staff only), `set_toll_free_isv_account` (staff only), `transfer_brand`, `create_external_vetting`, `update_brand`, `revet_brand`, `delete_brand` |
 | Campaigns | `client.campaigns` | `get_campaigns`, `create_campaign`, `update_campaign`, `delete_campaign` |
 | Campaigns Admin | `client.campaigns.admin` | `approve_campaign`, `reject_campaign` |
 | Groups | `client.groups` | `get_group`, `update_group` |

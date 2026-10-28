@@ -184,22 +184,50 @@ end
 
 # A given subgroup goes into the business verification's subgroupId query parameter, never the body.
 brands = SignalHouseSms::Brands.new(client, client, true)
-brands.get_business_verification(group_id: "G/1", subgroup_id: "S0000001", token: "test-token")
+brands.get_business_verifications(group_id: "G/1", subgroup_id: "S0000001", token: "test-token")
 path, options = client.calls.last
-check(path == "/brand/business-verification/G%2F1?subgroupId=S0000001" && options[:method] == :get && !options.key?(:body) && options[:token] == "test-token", "subgroup business verification read")
+check(path == "/brand/business-verification/G%2F1?subgroupId=S0000001" && options[:method] == :get && !options.key?(:body) && options[:token] == "test-token", "subgroup business verification list")
 details = { businessName: "Acme Inc", registrationType: "EIN", registrationNumber: "12-3456789" }
-brands.submit_business_verification(group_id: "G/1", details: details, subgroup_id: "S0000001", idempotency_key: "key-1")
+brands.create_business_verification(group_id: "G/1", details: details, subgroup_id: "S0000001", idempotency_key: "key-1")
 path, options = client.calls.last
-check(path == "/brand/business-verification/G%2F1?subgroupId=S0000001" && options[:method] == :put && options[:body] == details, "subgroup business verification submit")
-check(options[:headers] == { "Idempotency-Key" => "key-1" }, "subgroup business verification submit idempotency key")
-brands.get_business_verification(group_id: "G1", subgroup_id: "S&1 2")
+check(path == "/brand/business-verification/G%2F1?subgroupId=S0000001" && options[:method] == :post && options[:body] == details, "subgroup business verification create")
+check(options[:headers] == { "Idempotency-Key" => "key-1" }, "subgroup business verification create idempotency key")
+brands.get_business_verifications(group_id: "G1", subgroup_id: "S&1 2")
 check(client.calls.last[0] == "/brand/business-verification/G1?subgroupId=S%261+2", "subgroup escaped as a query value")
 # Without a subgroup both URLs stay exactly as they were.
-brands.get_business_verification(group_id: "G1")
-check(client.calls.last[0] == "/brand/business-verification/G1", "business verification read without a subgroup")
-brands.submit_business_verification(group_id: "G1", details: details)
+brands.get_business_verifications(group_id: "G1")
+check(client.calls.last[0] == "/brand/business-verification/G1", "business verification list without a subgroup")
+brands.create_business_verification(group_id: "G1", details: details)
 path, options = client.calls.last
-check(path == "/brand/business-verification/G1" && options[:body] == details, "business verification submit without a subgroup")
+check(path == "/brand/business-verification/G1" && options[:method] == :post && options[:body] == details, "business verification create without a subgroup")
+
+# One business verification is read and updated on its own path under the group's.
+brands.get_business_verification(group_id: "G/1", business_verification_id: "BV/1", token: "test-token")
+path, options = client.calls.last
+check(path == "/brand/business-verification/G%2F1/BV%2F1" && options[:method] == :get && !options.key?(:body) && options[:token] == "test-token", "business verification read")
+brands.update_business_verification(group_id: "G/1", business_verification_id: "BV/1", details: details, idempotency_key: "key-1")
+path, options = client.calls.last
+check(path == "/brand/business-verification/G%2F1/BV%2F1" && options[:method] == :put && options[:body] == details, "business verification update")
+check(options[:headers] == { "Idempotency-Key" => "key-1" }, "business verification update idempotency key")
+check(!brands.respond_to?(:submit_business_verification), "submit_business_verification is gone")
+sent = client.calls.length
+{
+  "groupId" => [-> { brands.get_business_verification(group_id: nil, business_verification_id: "BV1") },
+                -> { brands.update_business_verification(group_id: nil, business_verification_id: "BV1", details: details) }],
+  "businessVerificationId" => [-> { brands.get_business_verification(group_id: "G1", business_verification_id: nil) },
+                               -> { brands.update_business_verification(group_id: "G1", business_verification_id: nil, details: details) }],
+  "details" => [-> { brands.update_business_verification(group_id: "G1", business_verification_id: "BV1", details: nil) }]
+}.each do |field, calls|
+  calls.each do |call|
+    begin
+      call.call
+      raise "a business verification call accepted a missing #{field}"
+    rescue SignalHouseSms::ValidationError => e
+      check(e.message == "Missing required parameter: #{field}", "business verification calls name the missing #{field}")
+    end
+  end
+end
+check(client.calls.length == sent, "refused business verification calls send nothing")
 
 # The staff toll-free ISV account is read and set on the group's path; the body holds only the account and its key.
 brands.get_toll_free_isv_account(group_id: "G/1", token: "test-token")
@@ -226,7 +254,7 @@ end
 end
 check(client.calls.length == sent, "refused toll-free ISV account calls send nothing")
 
-puts "Registration Ruby contracts passed (7 regional reads, filter options, catalog, quotes, registrations, alphanumeric submission, opt-out links, staff namespace, validation, subgroup business verification, toll-free ISV account)"
+puts "Registration Ruby contracts passed (7 regional reads, filter options, catalog, quotes, registrations, alphanumeric submission, opt-out links, staff namespace, validation, business verifications, toll-free ISV account)"
 
 # The current toll-free carrier filter on the number list.
 numbers = SignalHouseSms::Numbers.new(client, client, false)

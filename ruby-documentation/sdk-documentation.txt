@@ -150,30 +150,37 @@ BRANDS  (signal_house.brands)
   create_brand(brand_data:, token: nil, headers: nil)
     Create a new 10DLC brand.
 
-  get_business_verification(group_id:, subgroup_id: nil, token: nil,
+  get_business_verifications(group_id:, subgroup_id: nil, token: nil,
       headers: nil)
-    Get a group's business verification: whether its toll-free brands need
-    one, its status and the submitted details.
+    List a group's business verifications, newest first, and whether its
+    toll-free brands need one.
     subgroup_id: optional, sent as the subgroupId query parameter only when
     given, and must then name a subgroup of the group. Some groups verify
     each subgroup's business separately: a platform whose subgroups are
     separate businesses, set up by Signal House. For those groups
-    subgroup_id is required. For any other group one business verification
-    covers all of its subgroups, so subgroup_id isn't needed; when given, it
+    subgroup_id is required. For any other group the business verifications
+    cover all of its subgroups, so subgroup_id isn't needed; when given, it
     is only checked.
-    Returns { groupId, subgroupId, required, status, details, submittedAt,
-    reviewedAt, rejectionReason }; subgroupId is included only when the
-    verification belongs to one subgroup, the subgroup whose business it
-    describes; status is NOT_STARTED, SUBMITTING, IN_REVIEW, VERIFIED or
+    Returns { groupId, subgroupId, required, businessVerifications };
+    subgroupId is included only when the business verifications belong to
+    one subgroup, the subgroup whose business they describe. Each business
+    verification is { businessVerificationId, groupId, subgroupId, status,
+    details, submittedAt, reviewedAt, rejectionReason }, with subgroupId
+    only when set; status is SUBMITTING, IN_REVIEW, VERIFIED or
     NEEDS_CHANGES; rejectionReason says why it needs changes, or is null.
     Errors: 400 when the group verifies each subgroup's business separately
     and subgroup_id is missing; 404 when the subgroup isn't in the group.
 
-  submit_business_verification(group_id:, details:, subgroup_id: nil,
+  get_business_verification(group_id:, business_verification_id:,
       token: nil, headers: nil)
-    Submit or update a group's business verification. Allowed when it is not
-    started or needs changes. Review usually takes 1–2 business days; the
-    group's toll-free brands stay pending until it is verified.
+    Get one of a group's business verifications by its ID: the business
+    verification, as get_business_verifications lists it, plus required.
+    Errors: 404 when it isn't one of the group's.
+
+  create_business_verification(group_id:, details:, subgroup_id: nil,
+      token: nil, headers: nil)
+    Create and submit a new business verification. Review usually takes 1–2
+    business days.
     details: hash with businessName, businessType, industry, registrationType,
     registrationNumber, website, street, street2 (optional), city, state,
     postalCode, country ("US" or "CA") and representative (firstName,
@@ -183,16 +190,33 @@ BRANDS  (signal_house.brands)
     subgroup of the group. Some groups verify each subgroup's business
     separately: a platform whose subgroups are separate businesses, set up
     by Signal House. For those groups subgroup_id is required, and only that
-    subgroup's toll-free brands follow this verification. For any other
-    group one business verification covers all of its subgroups, so
+    subgroup's toll-free brands can use this business verification. For any
+    other group the business verifications cover all of its subgroups, so
     subgroup_id isn't needed; when given, it is only checked.
-    Returns 202: { groupId, subgroupId, required, status, details,
-    submittedAt, reviewedAt, rejectionReason } with status SUBMITTING;
-    subgroupId is included only when the verification belongs to one
-    subgroup, the subgroup whose business it describes.
-    Errors: 400 when the group verifies each subgroup's business separately
-    and subgroup_id is missing; 404 when the subgroup isn't in the group;
-    400 when the subgroup isn't active.
+    Once it is VERIFIED, a new toll-free brand uses it by sending its ID as
+    tollFree.businessVerificationId to create_toll_free_brand. The brand's
+    legal fields (companyName, street, city, state, postalCode, country,
+    firstName, lastName and tollFree's businessRegistrationType, taxId,
+    countryCode and taxIdIssuingCountry) are then optional and come from the
+    business verification. A group whose toll-free brands need a business
+    verification must send it; any other group gets 400 if it does. It
+    can't be changed after the brand is created.
+    Returns 202: the business verification, as get_business_verifications
+    lists it, with status SUBMITTING.
+    Errors: 400 when the group's toll-free brands don't need a business
+    verification, or when the group verifies each subgroup's business
+    separately and subgroup_id is missing; 404 when the subgroup isn't in
+    the group; 400 when the subgroup isn't active.
+
+  update_business_verification(group_id:, business_verification_id:,
+      details:, token: nil, headers: nil)
+    Correct and resubmit a business verification. Allowed only while its
+    status is NEEDS_CHANGES. Review usually takes 1–2 business days; the
+    toll-free brands that use it stay pending until it is verified.
+    details: as for create_business_verification.
+    Returns 202: the business verification, with status SUBMITTING.
+    Errors: 400 when it doesn't need changes; 404 when it isn't one of the
+    group's.
 
   update_brand(brand_id:, brand_data:, token: nil, headers: nil)
     Update brand information.

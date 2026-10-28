@@ -28,6 +28,13 @@ module SignalHouseSms
     # in the window; the volumes say how much traffic sits behind it. A campaign's figure is scored from the
     # campaign's own summed counters, never averaged from its numbers. For a live figure use GET /number/health
     # or GET /campaign/health.
+    #
+    # Every record also carries a `carrierSuspensions` array -- one entry per carrier suspension of the
+    # campaign: `{ mnoId, mnoName, source, suspensionCategory, reason, tcrEventType, suspendedAt, liftedAt }`.
+    # An entry is active while `liftedAt` is null. `mnoId` is the TCR carrier network id (same ids as `mnoIds`);
+    # `source` is CARRIER, UPSTREAM or BRAND (the carrier suspended the whole brand). A suspension applies to one
+    # carrier, so `status` stays ACTIVE. Subscribe to the CAMPAIGN_SUSPENDED / CAMPAIGN_UNSUSPENDED webhook events
+    # to be told when an entry opens or is lifted.
     def get_campaigns(id: nil, brand_id: nil, subgroup_id: nil, group_id: nil, page: nil, limit: nil, status: nil, registration_type: nil, **opts)
       token = opts[:token]
       headers = HttpClient.headers_for(opts)

@@ -313,6 +313,54 @@ module SignalHouseSms
       @client.request("/agent/endpoints/#{safe_channel}/#{safe_endpoint_value}", method: :delete, token: token, headers: headers)
     end
 
+    # GET /agent/pauses?groupId=...&subgroupId=...&channel=...&endpointValue=...&contactIdentifier=...
+    # List paused agent conversations in a group, newest first. A paused conversation is one a
+    # person took over; the agent stays out of it until it is resumed. groupId is required;
+    # subgroup_id, channel ("sms"), endpoint_value (the agent's number) and contact_identifier
+    # (the contact's number), digits only with no "+", narrow the list. Each pause carries
+    # groupId, subgroupId, channel, endpointValue, contactIdentifier, reason ("human_reply", "escalation" or
+    # "manual"), pausedBy, createdAt, and updatedAt.
+    # Allowed roles: api, admin, developer, billing, user.
+    def get_agent_contact_pauses(group_id:, subgroup_id: nil, channel: nil, endpoint_value: nil, contact_identifier: nil, **opts)
+      @client.require_params("groupId" => group_id)
+      token = opts[:token]
+      headers = HttpClient.headers_for(opts)
+      qs = @client.get_query_string(groupId: group_id, subgroupId: subgroup_id, channel: channel, endpointValue: endpoint_value, contactIdentifier: contact_identifier)
+      @client.request("/agent/pauses#{qs}", method: :get, token: token, headers: headers)
+    end
+
+    # PUT /agent/pauses/:channel/:endpointValue/:contactIdentifier
+    # Pause an agent on one conversation (its number + one contact). The agent stops answering
+    # that contact on that number until the conversation is resumed; there is no timer. The
+    # conversation's pending replies are rejected. Pausing a paused conversation keeps the
+    # original pause. channel must be "sms"; endpoint_value and contact_identifier are 10 to 15
+    # digits, country code included, no "+". pause_data accepts reason ("human_reply" or
+    # "manual", the default). Returns the pause.
+    # Allowed roles: api, admin, developer, billing, user.
+    def pause_agent_conversation(channel:, endpoint_value:, contact_identifier:, pause_data: {}, **opts)
+      @client.require_params("channel" => channel, "endpointValue" => endpoint_value, "contactIdentifier" => contact_identifier)
+      token = opts[:token]
+      headers = HttpClient.headers_for(opts)
+      safe_channel = CGI.escape(channel.to_s)
+      safe_endpoint_value = CGI.escape(endpoint_value.to_s)
+      safe_contact_identifier = CGI.escape(contact_identifier.to_s)
+      @client.request("/agent/pauses/#{safe_channel}/#{safe_endpoint_value}/#{safe_contact_identifier}", method: :put, body: pause_data || {}, token: token, headers: headers)
+    end
+
+    # DELETE /agent/pauses/:channel/:endpointValue/:contactIdentifier
+    # Resume an agent on a paused conversation, so it answers the contact's next text again.
+    # Returns the removed pause.
+    # Allowed roles: api, admin, developer, billing, user.
+    def resume_agent_conversation(channel:, endpoint_value:, contact_identifier:, **opts)
+      @client.require_params("channel" => channel, "endpointValue" => endpoint_value, "contactIdentifier" => contact_identifier)
+      token = opts[:token]
+      headers = HttpClient.headers_for(opts)
+      safe_channel = CGI.escape(channel.to_s)
+      safe_endpoint_value = CGI.escape(endpoint_value.to_s)
+      safe_contact_identifier = CGI.escape(contact_identifier.to_s)
+      @client.request("/agent/pauses/#{safe_channel}/#{safe_endpoint_value}/#{safe_contact_identifier}", method: :delete, token: token, headers: headers)
+    end
+
     # GET /agent/drafts?groupId=...&subgroupId=...&agentProfileId=...&status=...&page=...&limit=...
     # List held agent replies (the Pending Replies queue) in a group, newest first. groupId is
     # required; subgroup_id, agent_profile_id and status ("pending", "sending", "sent",
