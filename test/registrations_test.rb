@@ -229,32 +229,7 @@ sent = client.calls.length
 end
 check(client.calls.length == sent, "refused business verification calls send nothing")
 
-# The staff toll-free ISV account is read and set on the group's path; the body holds only the account and its key.
-brands.get_toll_free_isv_account(group_id: "G/1", token: "test-token")
-path, options = client.calls.last
-check(path == "/brand/toll-free-isv-account/G%2F1" && options[:method] == :get && !options.key?(:body) && options[:token] == "test-token", "toll-free ISV account read")
-account = { group_id: "G/1", account_sid: "AC#{'0' * 32}", api_key_sid: "SK#{'1' * 32}", api_key_secret: "key-secret" }
-brands.set_toll_free_isv_account(**account, idempotency_key: "key-1")
-path, options = client.calls.last
-check(path == "/brand/toll-free-isv-account/G%2F1" && options[:method] == :put && options[:headers] == { "Idempotency-Key" => "key-1" }, "toll-free ISV account set")
-check(options[:body] == { accountSid: account[:account_sid], apiKeySid: account[:api_key_sid], apiKeySecret: "key-secret" }, "toll-free ISV account body")
-sent = client.calls.length
-begin
-  brands.get_toll_free_isv_account(group_id: nil)
-  raise "get_toll_free_isv_account accepted a missing groupId"
-rescue SignalHouseSms::ValidationError
-end
-{ "groupId" => :group_id, "accountSid" => :account_sid, "apiKeySid" => :api_key_sid, "apiKeySecret" => :api_key_secret }.each do |field, key|
-  begin
-    brands.set_toll_free_isv_account(**account.merge(key => nil))
-    raise "set_toll_free_isv_account accepted a missing #{field}"
-  rescue SignalHouseSms::ValidationError => e
-    check(e.message == "Missing required parameter: #{field}", "set_toll_free_isv_account names the missing #{field}")
-  end
-end
-check(client.calls.length == sent, "refused toll-free ISV account calls send nothing")
-
-puts "Registration Ruby contracts passed (7 regional reads, filter options, catalog, quotes, registrations, alphanumeric submission, opt-out links, staff namespace, validation, business verifications, toll-free ISV account)"
+puts "Registration Ruby contracts passed (7 regional reads, filter options, catalog, quotes, registrations, alphanumeric submission, opt-out links, staff namespace, validation, business verifications)"
 
 # The current toll-free carrier filter on the number list.
 numbers = SignalHouseSms::Numbers.new(client, client, false)

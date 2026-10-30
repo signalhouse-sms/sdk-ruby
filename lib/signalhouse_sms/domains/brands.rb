@@ -109,27 +109,6 @@ module SignalHouseSms
       @client.request("/brand/business-verification/#{safe_group_id}/#{safe_business_verification_id}", method: :put, body: details, token: token, headers: headers)
     end
 
-    # GET /brand/toll-free-isv-account/:groupId — get a group's toll-free ISV account, its own parent account at the
-    # toll-free provider; data is nil when it has none (signalhouse_api, signalhouse_admin or signalhouse_user only).
-    def get_toll_free_isv_account(group_id:, **opts)
-      @client.require_params("groupId" => group_id)
-      token = opts[:token]
-      headers = HttpClient.headers_for(opts)
-      safe_group_id = CGI.escape(group_id.to_s)
-      @client.request("/brand/toll-free-isv-account/#{safe_group_id}", method: :get, token: token, headers: headers)
-    end
-
-    # PUT /brand/toll-free-isv-account/:groupId — register a group's toll-free ISV account, or replace the API key of the
-    # one it has (signalhouse_admin only). The provider checks the account and key first; the secret is never returned.
-    def set_toll_free_isv_account(group_id:, account_sid:, api_key_sid:, api_key_secret:, **opts)
-      @client.require_params("groupId" => group_id, "accountSid" => account_sid, "apiKeySid" => api_key_sid, "apiKeySecret" => api_key_secret)
-      token = opts[:token]
-      headers = HttpClient.headers_for(opts)
-      safe_group_id = CGI.escape(group_id.to_s)
-      body = { accountSid: account_sid, apiKeySid: api_key_sid, apiKeySecret: api_key_secret }
-      @client.request("/brand/toll-free-isv-account/#{safe_group_id}", method: :put, body: body, token: token, headers: headers)
-    end
-
     # POST /brand/short-code — create a local Short Code brand in PENDING_APPROVAL for manual review.
     # The route forces registrationType to SHORT_CODE and returns a synchronous 201 record with an
     # SCB-prefixed brandId.

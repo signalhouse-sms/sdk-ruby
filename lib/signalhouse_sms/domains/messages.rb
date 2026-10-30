@@ -79,7 +79,7 @@ module SignalHouseSms
     # sentimentScore is an average, so it must never be summed across responses.
     # message_type scopes the SENTIMENT figures to "SMS", "MMS" or "P2P" (single value, array, or comma-separated
     # string); omit for all scored types. It does NOT narrow the message counts, which are always returned split per type.
-    # carrier_family filters by the recipient's resolved carrier family (Default, ATT, TMobile, Verizon, USCellular, GoogleVoice, ClearSky, Interop, RogueMobile, P2P, Standard, IceWireless); single value, array,
+    # carrier_family filters by the recipient's resolved carrier family (Default, ATT, TMobile, Verizon, USCellular, GoogleVoice, ClearSky, Interop, RogueMobile, P2P, Standard, IceWireless, Bell, Rogers, Telus, Videotron, SaskTel, Eastlink, Fibernetics); single value, array,
     # or comma-separated string. Only accepted where the environment serves hourly analytics; elsewhere any value is rejected with a 400 -- omit the parameter unless it is wanted.
     # date_bounds is which contract binds start_date/end_date. "day": each bound is widened to its whole UTC day
     #. "exact": a timestamp is bound as the instant it names and a bare date is its
@@ -112,7 +112,7 @@ module SignalHouseSms
     # The fields are always present; sentimentScore is an average and must never be summed across rows or responses.
     # message_type scopes the SENTIMENT figures to "SMS", "MMS" or "P2P" (single value, array, or comma-separated
     # string); omit for all scored types. It does NOT narrow the message counts, which are always returned split per type.
-    # carrier_family filters by the recipient's resolved carrier family (Default, ATT, TMobile, Verizon, USCellular, GoogleVoice, ClearSky, Interop, RogueMobile, P2P, Standard, IceWireless); single value, array,
+    # carrier_family filters by the recipient's resolved carrier family (Default, ATT, TMobile, Verizon, USCellular, GoogleVoice, ClearSky, Interop, RogueMobile, P2P, Standard, IceWireless, Bell, Rogers, Telus, Videotron, SaskTel, Eastlink, Fibernetics); single value, array,
     # or comma-separated string. Only accepted where the environment serves hourly analytics; elsewhere any value is rejected with a 400 -- omit the parameter unless it is wanted.
     # granularity ("day" | "hour") is the time-bucket grain of the byDate rows. Omit for day (each row's _id is a
     # "YYYY-MM-DD" date). "hour" buckets by hour (each row's _id is a "YYYY-MM-DD HH:MM:SS" UTC hour; start_date is
@@ -199,7 +199,7 @@ module SignalHouseSms
     # message_type: SMS | MMS | P2P (single value or array) — scopes ONLY the sentiment figures.
     # Omit for all scored types; it does not narrow the message counts, which are always returned
     # split per type and have no filterable type dimension.
-    # carrier_family filters by the recipient's resolved carrier family (Default, ATT, TMobile, Verizon, USCellular, GoogleVoice, ClearSky, Interop, RogueMobile, P2P, Standard, IceWireless); single value, array,
+    # carrier_family filters by the recipient's resolved carrier family (Default, ATT, TMobile, Verizon, USCellular, GoogleVoice, ClearSky, Interop, RogueMobile, P2P, Standard, IceWireless, Bell, Rogers, Telus, Videotron, SaskTel, Eastlink, Fibernetics); single value, array,
     # or comma-separated string. Only accepted where the environment serves hourly analytics; elsewhere any value is rejected with a 400 -- omit the parameter unless it is wanted.
     # registration_id filters to traffic attributed to these registrations (hourly analytics only; a 400 while hourly
     # reads are off); single value or array. A phone_number filter takes precedence.
@@ -227,7 +227,7 @@ module SignalHouseSms
     # channel: "both" (default, every code) or "tenDLC" | "virtualLongCode" | "tollFree" | "shortCode" | "p2p" (single value or
     # array) — scopes ORDER BY + totalCount by the stored channel column; when one channel is
     # selected, totalErrors reflects only that channel.
-    # carrier_family filters by the recipient's resolved carrier family (Default, ATT, TMobile, Verizon, USCellular, GoogleVoice, ClearSky, Interop, RogueMobile, P2P, Standard, IceWireless); single value, array,
+    # carrier_family filters by the recipient's resolved carrier family (Default, ATT, TMobile, Verizon, USCellular, GoogleVoice, ClearSky, Interop, RogueMobile, P2P, Standard, IceWireless, Bell, Rogers, Telus, Videotron, SaskTel, Eastlink, Fibernetics); single value, array,
     # or comma-separated string. Only accepted where the environment serves hourly analytics; elsewhere any value is rejected with a 400 -- omit the parameter unless it is wanted.
     # registration_id filters to traffic attributed to these registrations (hourly analytics only; a 400 while hourly
     # reads are off); single value or array. A phone_number filter takes precedence.
@@ -293,7 +293,7 @@ module SignalHouseSms
     # records for non-US recipients), optOutKeyword — the normalized keyword that revoked consent (e.g. "stop", "opt out";
     # a repeat opt-out records the most recent word), nil for opt-outs recorded before keyword capture
     # shipped — and carrierFamily, the resolved carrier family of the recipient number (Default, ATT, TMobile,
-    # Verizon, USCellular, GoogleVoice, ClearSky, Interop, RogueMobile, Standard, IceWireless), copied from the inbound message that
+    # Verizon, USCellular, GoogleVoice, ClearSky, Interop, RogueMobile, Standard, IceWireless, Bell, Rogers, Telus, Videotron, SaskTel, Eastlink, Fibernetics), copied from the inbound message that
     # triggered the opt-out.
     # registration_id filters to traffic attributed to these registrations (hourly analytics only; a 400 while hourly
     # reads are off); single value or array. A phone_number filter takes precedence.

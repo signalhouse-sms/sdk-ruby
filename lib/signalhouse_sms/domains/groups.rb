@@ -27,6 +27,70 @@ module SignalHouseSms
       @client.request("/group/#{safe_id}", method: :put, body: group_data, token: token, headers: headers)
     end
 
+    # GET /group/sso?groupId=...
+    # The group's SSO connection (client secret never returned) and its email domains with verification status.
+    def get_sso_configuration(group_id:, **opts)
+      @client.require_params("groupId" => group_id)
+      token = opts[:token]
+      headers = HttpClient.headers_for(opts)
+      qs = @client.get_query_string(groupId: group_id)
+      @client.request("/group/sso#{qs}", method: :get, token: token, headers: headers)
+    end
+
+    # PUT /group/sso
+    # Create or update the group's OIDC SSO connection. client_secret may be omitted on update to keep the
+    # stored one. Requires a fresh auth.confirm_two_factor_identity from the same session (403 otherwise).
+    def save_sso_connection(group_id:, issuer:, client_id:, client_secret: nil, enabled: nil, **opts)
+      @client.require_params("groupId" => group_id, "issuer" => issuer, "clientId" => client_id)
+      token = opts[:token]
+      headers = HttpClient.headers_for(opts)
+      body = { groupId: group_id, issuer: issuer, clientId: client_id }
+      body[:clientSecret] = client_secret unless client_secret.nil?
+      body[:enabled] = enabled unless enabled.nil?
+      @client.request("/group/sso", method: :put, body: body, token: token, headers: headers)
+    end
+
+    # DELETE /group/sso?groupId=...
+    # Delete the group's SSO connection. Requires a fresh auth.confirm_two_factor_identity from the same
+    # session (403 otherwise).
+    def delete_sso_connection(group_id:, **opts)
+      @client.require_params("groupId" => group_id)
+      token = opts[:token]
+      headers = HttpClient.headers_for(opts)
+      qs = @client.get_query_string(groupId: group_id)
+      @client.request("/group/sso#{qs}", method: :delete, token: token, headers: headers)
+    end
+
+    # POST /group/sso/domains
+    # Claim an email domain for the group's SSO. Returns the DNS TXT record to publish before verify_sso_domain.
+    def add_sso_domain(group_id:, domain:, **opts)
+      @client.require_params("groupId" => group_id, "domain" => domain)
+      token = opts[:token]
+      headers = HttpClient.headers_for(opts)
+      @client.request("/group/sso/domains", method: :post, body: { groupId: group_id, domain: domain }, token: token, headers: headers)
+    end
+
+    # POST /group/sso/domains/:domain/verify
+    # Check the domain's DNS TXT record and mark the domain verified when it matches.
+    def verify_sso_domain(group_id:, domain:, **opts)
+      @client.require_params("groupId" => group_id, "domain" => domain)
+      token = opts[:token]
+      headers = HttpClient.headers_for(opts)
+      safe_domain = CGI.escape(domain.to_s)
+      @client.request("/group/sso/domains/#{safe_domain}/verify", method: :post, body: { groupId: group_id }, token: token, headers: headers)
+    end
+
+    # DELETE /group/sso/domains/:domain?groupId=...
+    # Remove an email domain from the group's SSO.
+    def remove_sso_domain(group_id:, domain:, **opts)
+      @client.require_params("groupId" => group_id, "domain" => domain)
+      token = opts[:token]
+      headers = HttpClient.headers_for(opts)
+      safe_domain = CGI.escape(domain.to_s)
+      qs = @client.get_query_string(groupId: group_id)
+      @client.request("/group/sso/domains/#{safe_domain}#{qs}", method: :delete, token: token, headers: headers)
+    end
+
     class Admin
       def initialize(client)
         @client = client

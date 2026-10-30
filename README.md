@@ -222,12 +222,12 @@ client.users.admin.create_internal_user(
 
 | Domain | Accessor | Methods |
 |--------|----------|---------|
-| Auth | `client.auth` | `login`, `reset_password`, `get_auth_history` |
+| Auth | `client.auth` | `login`, `reset_password`, `get_auth_history`, `get_oauth_links`, `create_oauth_link`, `create_oauth_reauth`, `confirm_oauth_reauth`, `confirm_oauth_link`, `delete_oauth_link`, `get_oauth_authorization_url` |
 | Billing | `client.billing` | `get_transaction_history`, `get_wallet`, `update_wallet`, `get_payment_methods`, `add_funds`, `add_payment_method`, `remove_payment_method`, `get_invoice_details`, `get_fees` |
-| Brands | `client.brands` | `get_brands`, `get_external_vetting`, `create_brand`, `get_business_verifications`, `get_business_verification`, `create_business_verification`, `update_business_verification`, `get_toll_free_isv_account` (staff only), `set_toll_free_isv_account` (staff only), `transfer_brand`, `create_external_vetting`, `update_brand`, `revet_brand`, `delete_brand` |
+| Brands | `client.brands` | `get_brands`, `get_external_vetting`, `create_brand`, `get_business_verifications`, `get_business_verification`, `create_business_verification`, `update_business_verification`, `transfer_brand`, `create_external_vetting`, `update_brand`, `revet_brand`, `delete_brand` |
 | Campaigns | `client.campaigns` | `get_campaigns`, `create_campaign`, `update_campaign`, `delete_campaign` |
 | Campaigns Admin | `client.campaigns.admin` | `approve_campaign`, `reject_campaign` |
-| Groups | `client.groups` | `get_group`, `update_group` |
+| Groups | `client.groups` | `get_group`, `update_group`, `get_sso_configuration`, `save_sso_connection`, `delete_sso_connection`, `add_sso_domain`, `verify_sso_domain`, `remove_sso_domain` |
 | Groups Admin | `client.groups.admin` | `get_groups`, `create_group`, `delete_group` |
 | Landings | `client.landings` | `get_landings`, `get_public_landing`, `create_landing`, `update_landing`, `get_landing_by_brand_id`, `delete_landing` |
 | Messages | `client.messages` | `get_messages`, `get_analytics`, `send_sms`, `send_mms`, `send_group_message`, `get_p2p_batch` |
