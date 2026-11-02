@@ -114,8 +114,9 @@ module SignalHouseSms
     # Start signing in again with a provider already linked to the caller's account, to confirm it's them.
     # Returns { reauthTicket, reauthSecret, expiresInSeconds }. Keep reauthSecret in the client that started the
     # flow: it is returned only here, and confirm_oauth_reauth needs it. Pass reauthTicket as reauth_ticket: to
-    # get_oauth_authorization_url and navigate the browser there. provider is "google", "microsoft", "apple" or
-    # "sso"; the ticket is single-use and valid 2 minutes, and nothing is spent. The browser comes back to
+    # get_oauth_authorization_url and navigate the browser there. provider is "microsoft", "apple" or "sso"
+    # (Google is refused with a 400 because it can't confirm a fresh sign-in; confirm with a code instead); the
+    # ticket is single-use and valid 2 minutes, and nothing is spent. The browser comes back to
     # /Settings/Security with a single-use `pendingReauth` (the session that started it redeems it with confirm_oauth_reauth) or `reauthError` (reauth_wrong_account, reauth_unsupported,
     # reauth_stale, invalid_state, sso_not_configured, access_denied or provider_error).
     def create_oauth_reauth(provider:, **opts)
@@ -150,7 +151,7 @@ module SignalHouseSms
 
     # DELETE /auth/oauth/:provider/link
     # Unlink a sign-in provider (provider may be "sso") from the caller's account. Refused (400) if it is the
-    # account's only way to sign in. Requires a fresh confirm_two_factor_identity from the same session (403 otherwise).
+    # account's only way to sign in. With 2FA on and no password, the last linked Microsoft, Apple or SSO sign-in is refused (400) too. Requires a fresh confirm_two_factor_identity from the same session (403 otherwise).
     def delete_oauth_link(provider:, **opts)
       @client.require_params("provider" => provider)
       @client.request("/auth/oauth/#{CGI.escape(provider.to_s)}/link", method: :delete, token: opts[:token], headers: opts[:headers])

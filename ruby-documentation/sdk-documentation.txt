@@ -113,7 +113,7 @@ AUTH  (signal_house.auth)
   create_oauth_reauth(provider:, token: nil, headers: nil)
     Start signing in again with a provider linked to the caller's account, to
     confirm it's them. Sends a POST to /auth/oauth/:provider/reauth. No request body.
-    provider: "google", "microsoft", "apple" or "sso". Spends nothing.
+    provider: "microsoft", "apple" or "sso" (Google is refused with 400). Spends nothing.
     Returns: { reauthTicket, reauthSecret, expiresInSeconds } (keep reauthSecret for the confirm call) -- pass reauthTicket as reauth_ticket: to
     get_oauth_authorization_url and navigate the browser there. It comes back to
     /Settings/Security with a single-use pendingReauth (the session that
@@ -144,7 +144,7 @@ AUTH  (signal_house.auth)
     Sends a DELETE to /auth/oauth/:provider/link.
     provider: "google", "microsoft", "apple" or "sso"
     Requires a fresh confirm_two_factor_identity from the same session.
-    Returns 400 when it is the account's only way to sign in.
+    Returns 400 when it is the account's only way to sign in. With 2FA on and no password, the last linked Microsoft, Apple or SSO sign-in is refused (400) too.
     Returns: { passwordKnown, links } (the remaining sign-in methods)
 
   get_oauth_authorization_url(provider:, next_path: nil, email: nil,
