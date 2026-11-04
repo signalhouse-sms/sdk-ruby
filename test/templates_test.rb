@@ -53,7 +53,7 @@ rescue error_class
 end
 
 body = {
-  channel: "rcs", contentFormat: "rcs.blocks.v1",
+  channel: "rcs", contentFormat: "content.v1",
   content: { blocks: [{ id: "b1", kind: "text", text: "Hi {{first_name}}" }] },
   variables: [{ key: "first_name", type: "text", required: true }], defaults: {}, fallback: {}
 }
@@ -106,6 +106,9 @@ check(raises?(SignalHouseSms::Error) { templates.validate(template_id: "TPL1", g
 check(raises?(SignalHouseSms::Error) { templates.validate(template_id: "TPL1", group_id: "G1", body: body, version: 1) }, "validate rejects both")
 templates.capabilities(group_id: "G1", channel: "rcs", provider: "sinch")
 check(client.calls.last[0] == "/template/capabilities?groupId=G1&channel=rcs&provider=sinch", "capabilities")
+templates.geocode_address(group_id: "G1", address: "Chicago")
+check(client.calls.last[0] == "/template/geocode?groupId=G1&address=Chicago" && client.calls.last[1][:method] == :get, "geocode")
+check(raises?(SignalHouseSms::Error) { templates.geocode_address(group_id: "G1", address: nil) }, "geocode needs an address")
 
 io = StringIO.new("\x89PNG".b)
 calls_before = client.calls.size

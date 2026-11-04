@@ -14,6 +14,9 @@ module SignalHouseSms
     # Each brand carries `carrierSuspensions` (carrier brand suspension rules; active while liftedAt is null).
     # current_toll_free_carrier: true, with group_id or subgroup_id, returns only toll-free brands on the group's
     # current toll-free carrier, the ones a new toll-free campaign in that group can use.
+    # Each toll-free brand carries tollFree.reviewsBusinessOnSubmit: whether it's reviewed when it's submitted and keeps
+    # its business details from then on. A brand reviewed on submit also carries tollFree's businessStructure, industry,
+    # contactEmail, contactJobTitle, contactJobLevel and rejectionReason (why it was rejected, or null).
     def get_brands(id: nil, subgroup_id: nil, group_id: nil, page: nil, limit: nil, status: nil, registration_type: nil, current_toll_free_carrier: nil, **opts)
       token = opts[:token]
       headers = HttpClient.headers_for(opts)
@@ -48,12 +51,11 @@ module SignalHouseSms
     # For Toll-Free, brandId is a
     # TFNB-prefixed id when assigned; otherwise null — poll by record _id.
     #
-    # tollFree.businessVerificationId names the business verification the brand uses (starts with BV). A group whose
-    # toll-free brands need a business verification must send a VERIFIED one of the brand's group (in a group that
-    # verifies each subgroup's business separately, of the brand's subgroup); any other group gets 400 if it sends one.
-    # With it, the legal fields (companyName, street, city, state, postalCode, country, firstName, lastName and
-    # tollFree's businessRegistrationType, taxId, countryCode and taxIdIssuingCountry) are optional: the business
-    # verification's values replace any that are sent. It can't be changed after creation.
+    # When get_toll_free_requirements says the group's toll-free brands are reviewed on submit, tollFree also needs
+    # businessStructure, industry, contactEmail, contactJobTitle and contactJobLevel, countryCode must be US or CA and
+    # state a 2-letter state or province code. Any other group gets 400 if it sends any of the five. Such a brand is
+    # DCA_PENDING until it's reviewed, then DCA_ACTIVE, or DCA_REJECTED with tollFree.rejectionReason saying why. Its
+    # business details can't change after it's submitted, so a rejected brand is fixed by creating it again.
     def create_toll_free_brand(brand_data:, **opts)
       @client.require_params("brandData" => brand_data)
       token = opts[:token]
@@ -61,52 +63,14 @@ module SignalHouseSms
       @client.request("/brand/toll-free", method: :post, body: brand_data, token: token, headers: headers)
     end
 
-    # GET /brand/business-verification/:groupId?subgroupId=...
-    # List a group's business verifications, newest first, and whether its toll-free brands need one (required).
-    # subgroup_id is sent only when given. A group that verifies each subgroup's business separately requires it.
-    def get_business_verifications(group_id:, subgroup_id: nil, **opts)
+    # GET /brand/toll-free-requirements/:groupId
+    # Whether the group's new toll-free brands are reviewed on submit: { groupId, reviewsBusinessOnSubmit }.
+    def get_toll_free_requirements(group_id:, **opts)
       @client.require_params("groupId" => group_id)
       token = opts[:token]
       headers = HttpClient.headers_for(opts)
       safe_group_id = CGI.escape(group_id.to_s)
-      qs = @client.get_query_string(subgroupId: subgroup_id)
-      @client.request("/brand/business-verification/#{safe_group_id}#{qs}", method: :get, token: token, headers: headers)
-    end
-
-    # GET /brand/business-verification/:groupId/:businessVerificationId
-    # Get one of a group's business verifications by its ID, plus required. 404 when it isn't one of the group's.
-    def get_business_verification(group_id:, business_verification_id:, **opts)
-      @client.require_params("groupId" => group_id, "businessVerificationId" => business_verification_id)
-      token = opts[:token]
-      headers = HttpClient.headers_for(opts)
-      safe_group_id = CGI.escape(group_id.to_s)
-      safe_business_verification_id = CGI.escape(business_verification_id.to_s)
-      @client.request("/brand/business-verification/#{safe_group_id}/#{safe_business_verification_id}", method: :get, token: token, headers: headers)
-    end
-
-    # POST /brand/business-verification/:groupId?subgroupId=...
-    # Create and submit a new business verification. Review usually takes 1–2 business days; once it is VERIFIED, a new
-    # toll-free brand can use it as tollFree.businessVerificationId. subgroup_id is sent only when given and must name an
-    # active subgroup of the group. A group that verifies each subgroup's business separately requires it.
-    def create_business_verification(group_id:, details:, subgroup_id: nil, **opts)
-      @client.require_params("groupId" => group_id, "details" => details)
-      token = opts[:token]
-      headers = HttpClient.headers_for(opts)
-      safe_group_id = CGI.escape(group_id.to_s)
-      qs = @client.get_query_string(subgroupId: subgroup_id)
-      @client.request("/brand/business-verification/#{safe_group_id}#{qs}", method: :post, body: details, token: token, headers: headers)
-    end
-
-    # PUT /brand/business-verification/:groupId/:businessVerificationId
-    # Correct and resubmit a business verification. Allowed only while it needs changes (400 otherwise); the toll-free
-    # brands that use it stay pending until it is verified.
-    def update_business_verification(group_id:, business_verification_id:, details:, **opts)
-      @client.require_params("groupId" => group_id, "businessVerificationId" => business_verification_id, "details" => details)
-      token = opts[:token]
-      headers = HttpClient.headers_for(opts)
-      safe_group_id = CGI.escape(group_id.to_s)
-      safe_business_verification_id = CGI.escape(business_verification_id.to_s)
-      @client.request("/brand/business-verification/#{safe_group_id}/#{safe_business_verification_id}", method: :put, body: details, token: token, headers: headers)
+      @client.request("/brand/toll-free-requirements/#{safe_group_id}", method: :get, token: token, headers: headers)
     end
 
     # POST /brand/short-code — create a local Short Code brand in PENDING_APPROVAL for manual review.

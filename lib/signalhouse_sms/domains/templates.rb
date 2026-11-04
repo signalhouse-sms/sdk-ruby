@@ -54,7 +54,7 @@ module SignalHouseSms
 
     # POST /template
     # Create a template whose first draft (version 1) holds body, the raw template body (e.g. an RcsTemplateBody
-    # { channel, contentFormat, content, variables, defaults, fallback }).
+    # { channel, contentFormat (optional; "content.v1" by default, or "google.rcs"), content, variables, defaults, fallback }).
     # Returns 201 with { head, version }.
     def create(group_id:, name:, body:, tag: nil, **opts)
       @client.require_params("groupId" => group_id, "name" => name, "body" => body)
@@ -141,6 +141,16 @@ module SignalHouseSms
       @client.require_params("groupId" => group_id)
       qs = @client.get_query_string(groupId: group_id, channel: channel, provider: provider)
       @client.request("/template/capabilities#{qs}", method: :get, token: opts[:token], headers: HttpClient.headers_for(opts))
+    end
+
+    # GET /template/geocode?groupId=...&address=...
+    # Resolves an address to coordinates for a VIEW_LOCATION suggestion. Returns { address, latitude, longitude,
+    # partialMatch }; 400 LOCATION_NOT_FOUND when nothing matches, 429 past the group's lookup window, 503 when the
+    # server has no geocoding provider.
+    def geocode_address(group_id:, address:, **opts)
+      @client.require_params("groupId" => group_id, "address" => address)
+      qs = @client.get_query_string(groupId: group_id, address: address)
+      @client.request("/template/geocode#{qs}", method: :get, token: opts[:token], headers: HttpClient.headers_for(opts))
     end
 
     # POST /template/media (multipart: file, groupId)

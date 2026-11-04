@@ -206,77 +206,62 @@ BRANDS  (signal_house.brands)
     current_toll_free_carrier: true, with group_id or subgroup_id, returns only
     toll-free brands on the group's current toll-free carrier, the ones a new
     toll-free campaign in that group can use.
+    Each toll-free brand carries tollFree.reviewsBusinessOnSubmit: whether it's
+    reviewed when it's submitted and keeps its business details from then
+    on. A brand reviewed on submit also carries tollFree's businessStructure,
+    industry, contactEmail, contactJobTitle and contactJobLevel, and
+    tollFree.rejectionReason: why the brand was rejected, in plain English,
+    or null.
 
   create_brand(brand_data:, token: nil, headers: nil)
     Create a new 10DLC brand.
 
-  get_business_verifications(group_id:, subgroup_id: nil, token: nil,
-      headers: nil)
-    List a group's business verifications, newest first, and whether its
-    toll-free brands need one.
-    subgroup_id: optional, sent as the subgroupId query parameter only when
-    given, and must then name a subgroup of the group. Some groups verify
-    each subgroup's business separately: a platform whose subgroups are
-    separate businesses, set up by Signal House. For those groups
-    subgroup_id is required. For any other group the business verifications
-    cover all of its subgroups, so subgroup_id isn't needed; when given, it
-    is only checked.
-    Returns { groupId, subgroupId, required, businessVerifications };
-    subgroupId is included only when the business verifications belong to
-    one subgroup, the subgroup whose business they describe. Each business
-    verification is { businessVerificationId, groupId, subgroupId, status,
-    details, submittedAt, reviewedAt, rejectionReason }, with subgroupId
-    only when set; status is SUBMITTING, IN_REVIEW, VERIFIED or
-    NEEDS_CHANGES; rejectionReason says why it needs changes, or is null.
-    Errors: 400 when the group verifies each subgroup's business separately
-    and subgroup_id is missing; 404 when the subgroup isn't in the group.
+  create_toll_free_brand(brand_data:, token: nil, headers: nil)
+    Create a Toll-Free brand. Sends a POST to /brand/toll-free, which sets
+    registrationType to TOLL_FREE.
+    brand_data requires subgroupId, displayName, companyName, street, city,
+    state, postalCode, email, firstName, lastName, website and tollFree, a
+    hash with businessRegistrationType, legalEntityType, taxId, countryCode
+    and supportPhone (E.164); tollFree also takes optional
+    taxIdIssuingCountry, businessDBA and businessWebsite.
+    When get_toll_free_requirements says the group's toll-free brands are
+    reviewed on submit, tollFree also needs these five fields:
+      businessStructure: CO_OPERATIVE, CORPORATION,
+        LIMITED_LIABILITY_CORPORATION, NON_PROFIT_CORPORATION or PARTNERSHIP
+      industry: AGRICULTURE, AUTOMOTIVE, BANKING, CONSTRUCTION, CONSUMER,
+        EDUCATION, ELECTRONICS, ENGINEERING, ENERGY,
+        FAST_MOVING_CONSUMER_GOODS, FINANCIAL, FINTECH, FOOD_AND_BEVERAGE,
+        GOVERNMENT, HEALTHCARE, HOSPITALITY, INSURANCE, JEWELRY, LEGAL,
+        MANUFACTURING, MEDIA, NOT_FOR_PROFIT, OIL_AND_GAS, ONLINE,
+        PROFESSIONAL_SERVICES, RAW_MATERIALS, REAL_ESTATE, RELIGION, RETAIL,
+        TECHNOLOGY, TELECOMMUNICATIONS, TRANSPORTATION or TRAVEL
+      contactEmail: the contact's email address (at most 100 characters)
+      contactJobTitle: the contact's job title (at most 100 characters)
+      contactJobLevel: DIRECTOR, GM, VP, CEO, CFO, GENERAL_COUNSEL or OTHER
+    tollFree.countryCode must then be "US" or "CA", and state a 2-letter
+    state or province code. The brand is DCA_PENDING until its business
+    details pass review, which usually takes 1–2 business days, then
+    DCA_ACTIVE; if they don't pass, it becomes DCA_REJECTED with
+    tollFree.rejectionReason saying why. To fix a rejected brand, create it
+    again with the corrected details. Its business details (companyName,
+    street, city, state, postalCode, country, firstName, lastName, tollFree's
+    businessRegistrationType, taxId, countryCode and taxIdIssuingCountry, and
+    tollFree's businessStructure, industry, contactEmail, contactJobTitle and
+    contactJobLevel) can't be changed after it's submitted.
+    Any other group gets 400 if it sends any of the five fields.
+    Returns 202: the brand, with status PENDING_CREATION.
 
-  get_business_verification(group_id:, business_verification_id:,
-      token: nil, headers: nil)
-    Get one of a group's business verifications by its ID: the business
-    verification, as get_business_verifications lists it, plus required.
-    Errors: 404 when it isn't one of the group's.
-
-  create_business_verification(group_id:, details:, subgroup_id: nil,
-      token: nil, headers: nil)
-    Create and submit a new business verification. Review usually takes 1–2
-    business days.
-    details: hash with businessName, businessType, industry, registrationType,
-    registrationNumber, website, street, street2 (optional), city, state,
-    postalCode, country ("US" or "CA") and representative (firstName,
-    lastName, email, phone in E.164, jobTitle, jobLevel).
-    subgroup_id: optional, sent as the subgroupId query parameter only when
-    given (the details body is unchanged), and must then name an active
-    subgroup of the group. Some groups verify each subgroup's business
-    separately: a platform whose subgroups are separate businesses, set up
-    by Signal House. For those groups subgroup_id is required, and only that
-    subgroup's toll-free brands can use this business verification. For any
-    other group the business verifications cover all of its subgroups, so
-    subgroup_id isn't needed; when given, it is only checked.
-    Once it is VERIFIED, a new toll-free brand uses it by sending its ID as
-    tollFree.businessVerificationId to create_toll_free_brand. The brand's
-    legal fields (companyName, street, city, state, postalCode, country,
-    firstName, lastName and tollFree's businessRegistrationType, taxId,
-    countryCode and taxIdIssuingCountry) are then optional and come from the
-    business verification. A group whose toll-free brands need a business
-    verification must send it; any other group gets 400 if it does. It
-    can't be changed after the brand is created.
-    Returns 202: the business verification, as get_business_verifications
-    lists it, with status SUBMITTING.
-    Errors: 400 when the group's toll-free brands don't need a business
-    verification, or when the group verifies each subgroup's business
-    separately and subgroup_id is missing; 404 when the subgroup isn't in
-    the group; 400 when the subgroup isn't active.
-
-  update_business_verification(group_id:, business_verification_id:,
-      details:, token: nil, headers: nil)
-    Correct and resubmit a business verification. Allowed only while its
-    status is NEEDS_CHANGES. Review usually takes 1–2 business days; the
-    toll-free brands that use it stay pending until it is verified.
-    details: as for create_business_verification.
-    Returns 202: the business verification, with status SUBMITTING.
-    Errors: 400 when it doesn't need changes; 404 when it isn't one of the
-    group's.
+  get_toll_free_requirements(group_id:, token: nil, headers: nil)
+    Read whether the group's new toll-free brands are reviewed when they're
+    submitted, which decides what create_toll_free_brand needs. Sends a GET
+    to /brand/toll-free-requirements/:groupId.
+    Returns 200: { groupId, reviewsBusinessOnSubmit }. When
+    reviewsBusinessOnSubmit is true, a new toll-free brand needs tollFree's
+    businessStructure, industry, contactEmail, contactJobTitle and
+    contactJobLevel, a tollFree.countryCode of "US" or "CA" and a 2-letter
+    state; it is DCA_PENDING until its business details pass review, and
+    they can't be changed after it's submitted.
+    Errors: 403 when the caller can't view the group.
 
   update_brand(brand_id:, brand_data:, token: nil, headers: nil)
     Update brand information.
@@ -845,7 +830,8 @@ to every message from it, counted in segments and in the estimate.
 
 GET /registration accepts groupId, subgroupId, region, type, kind, status,
 parentRegistrationId, phoneNumber (filter to registrations holding this phone
-number), sortBy (createdAt (default), subgroupId, registrationId, region or
+number), brandId, campaignId (RCS agents linked to that 10DLC brand or campaign;
+brand_id: and campaign_id: in Ruby), sortBy (createdAt (default), subgroupId, registrationId, region or
 status), sortOrder (asc or desc (default)), page and limit (max 100) and returns
 {data,totalCount,page,limit}.
 Region and status each take one value or a list (String or Array; an Array is
@@ -866,7 +852,24 @@ registration is not APPROVED.
 DELETE /registration/:registrationId cancels a registration (roles api, admin,
 developer, user). Allowed from SIGNAL_HOUSE_REVIEW, SIGNAL_HOUSE_APPROVED,
 PENDING_PROVIDER, NEEDS_INFORMATION, PAYMENT_REQUIRED and APPROVED (409
-otherwise). Numbers already allocated stay on the account and stop sending.
+otherwise); a type that keeps drafts (RCS_AGENT) can also be cancelled from
+DRAFT and SIGNAL_HOUSE_REJECTED. Numbers already allocated stay on the account
+and stop sending.
+
+update_registration(registration_id:, data:) sends PUT
+/registration/:registrationId to edit a DRAFT or SIGNAL_HOUSE_REJECTED
+registration of a type that keeps drafts (409 otherwise); data is a partial of
+the type's create fields. validate_registration(registration_id:) sends POST
+/:registrationId/validate and returns {valid, errors, warnings}; it writes
+nothing. submit_registration(registration_id:) sends POST /:registrationId/submit
+and moves a draft to SIGNAL_HOUSE_REVIEW, or to SUBMITTING for a type Signal House
+does not review first (RCS_AGENT, filed with the provider at once) (400
+REGISTRATION_INCOMPLETE with the errors, 409 on a second submit).
+launch_registration(registration_id:) sends POST /:registrationId/launch: an RCS
+agent the carrier partner holds in testing goes to SIGNAL_HOUSE_REVIEW, whose
+approval files the launch (409 unless the agent is in testing, Signal House
+rejected an earlier request, or every carrier refused one; 400
+REGISTRATION_INCOMPLETE with the errors).
 
 Staff only (the admin namespace exists only when the client enables admin, and
 enabling it grants no server permission):
@@ -981,16 +984,22 @@ server's block kinds, action types, limits and media rules, and with provider
 upload_media sends multipart fields file and groupId and returns
 {mediaId, url, bytes, mimeType, kind, width, height, ...} (201).
 
-The body is the raw RcsTemplateBody {channel:"rcs", contentFormat:"rcs.blocks.v1",
-content:{blocks}, variables, defaults, fallback}; the SDK sends it unchanged and
-offers no conversion, duplication or starter helpers. Unknown keys are rejected.
+The body is the raw RcsTemplateBody {channel:"rcs", contentFormat?, content,
+variables, defaults, fallback}; the SDK sends it unchanged and offers no
+conversion, duplication or starter helpers. contentFormat defaults to
+"content.v1" (content:{blocks}, the only format the API stores and returns);
+"google.rcs" sends Google's RBM AgentContentMessage as content, which the API
+converts to content.v1. A VIEW_LOCATION suggestion takes latitude/longitude or
+an address the API geocodes; geocode_address(group_id:, address:) resolves one
+for an author (400 LOCATION_NOT_FOUND, 429 past the group's lookup window, 503
+when the server has no geocoding provider). Unknown keys are rejected.
 Placeholders are {{key}}; {{sender_name}} is reserved. Writes accept an
 idempotency key. Reads (including validate and capabilities) need
 admin, developer, api, billing or user; writes need admin, developer or api.
 
 LANGUAGE EXAMPLE
   body = {
-    channel: "rcs", contentFormat: "rcs.blocks.v1",
+    channel: "rcs",
     content: { blocks: [{ id: "b1", kind: "text", text: "Hi {{first_name}}" }] },
     variables: [{ key: "first_name", type: "text", required: true }]
   }
@@ -1003,7 +1012,102 @@ LANGUAGE EXAMPLE
   signal_house.templates.publish(template_id: head["templateId"], group_id: "G1")
   signal_house.templates.list(group_id: "G1", channel: "rcs", state: "PUBLISHED")
   signal_house.templates.capabilities(group_id: "G1", provider: "infobip")
+  signal_house.templates.geocode_address(group_id: "G1", address: "88 Lakeshore Drive, Chicago")
   File.open("hero.png", "rb") do |image|
     signal_house.templates.upload_media(group_id: "G1",
       file: { filename: "hero.png", io: image, content_type: "image/png" })
   end
+
+
+RCS AGENTS  (signal_house.rcs.agents)
+--------------------------------------------------------------------------------
+RCS agents under /rcs/agent. An agent links one 10DLC brand and one 10DLC
+campaign: the campaign's numbers are its SMS fallback, and the brand and
+campaign supply the company identity and consent text for the carrier launch.
+One brand or campaign can serve many agents. An agent is a registration (type
+RCS_AGENT, agentId = registrationId "RCSA" + 10 characters), so the
+registrations methods read and edit the same record. 404 while RCS is disabled
+for the environment; 400 while the group's rcsEnabled flag is off. To use a new
+brand and campaign, create the brand (brands.create_brand), wait until it is
+VERIFIED, create the campaign (campaigns.create_campaign), then link them.
+
+The agent: {agentId, groupId, subgroupId, status, registrationStatus, stage,
+brandId, brandRef, campaignId, campaignRef, links, agent, consent, useCase,
+billingCategory, defaultFallback, excludedCarriers, testers, contact,
+testerInvites, carriers, launchable, review, submittedAt, approvedAt, history,
+createdAt,
+updatedAt}. launchable is true
+  when the launch request would be accepted now. brandRef and campaignRef are the
+linked records' _ids; brandId and campaignId are their current public ids
+(brandId is null until TCR assigns one). links = {brand: {state: OK |
+NOT_VERIFIED | MISSING, ...}, campaign: {state: OK | NOT_ACTIVE | MISSING |
+NONE, ...}}; a deleted brand or campaign reads MISSING. status: DRAFT,
+PENDING_REVIEW, REJECTED, AGENT_CREATING (approved, waiting for the carrier
+launch), ARCHIVED.
+
+create(brand_id:, campaign_id:, agent:, consent:, use_case:, billing_category:,
+       default_fallback:, excluded_carriers:, testers:, contact:)
+  Create a draft (201). brand_id is a carrier brand ID, provisional UUID or
+  _id; campaign_id (optional until submit) is a campaign ID or _id of that
+  brand. The agent's subgroup is the brand's. Blank consent fields fill from
+  the campaign. Required: brand_id
+
+list(group_id:, subgroup_id:, status:, brand_id:, campaign_id:, page:, limit:)
+  List agents, newest first. status takes one value or an Array (sent
+  comma-separated). brand_id / campaign_id return the agents linked to that
+  brand or campaign. Returns {data, total, page, limit}.
+
+get(agent_id:)
+  One agent with the live state of its links.
+
+update(agent_id:, brand_id:, campaign_id:, agent:, consent:, use_case:,
+       billing_category:, default_fallback:, excluded_carriers:, testers:, contact:)
+  Edit a DRAFT or REJECTED agent. Only the arguments you pass are sent. agent
+  and consent merge field by field; other keys replace; campaign_id: nil
+  unlinks (use_case: nil and default_fallback: nil clear those fields). 409
+  once submitted.
+
+validate(agent_id:)
+  Returns {valid, errors, warnings} of {field, reason}; writes nothing.
+
+submit(agent_id:)
+  Create the agent at the carrier partner, with no review first. Needs the full
+  profile, use_case and NON_CONVERSATIONAL billing; otherwise 400 with details
+  {code: "REGISTRATION_INCOMPLETE", errors, warnings}. The agent moves to
+  AGENT_CREATING, then IN_TESTING once the partner reports it ready.
+
+launch(agent_id:)
+  Request the launch (POST /registration/:agentId/launch). The launch
+  requirements are checked (a VERIFIED brand, the campaign, the full consent
+  with the launch video, the contact) and the agent goes to PENDING_REVIEW;
+  Signal House's approval files the launch with the carrier partner. Allowed
+  from IN_TESTING, REJECTED and CARRIER_REJECTED (409 otherwise); a failed
+  requirement is 400 REGISTRATION_INCOMPLETE.
+
+archive(agent_id:)
+  Archive the agent.
+
+resend_tester_invite(agent_id:, phone_number:)
+  POST /rcs/agent/:agentId/testers/:phoneNumber/resend. Resend a tester's expired invitation.
+
+upload_asset(agent_id:, kind:, file:, file_name:)
+  Host a logo (224 x 224 px, 50 KB max) or hero (1440 x 448 px, 200 KB max)
+  PNG or JPEG and set it on the draft. kind: "logo" | "hero". file is an IO or
+  a {filename:, io:, content_type:} hash. Sends multipart/form-data fields kind
+  and file. Required: agent_id, kind, file
+
+Pass idempotency_key: on create to make a retry safe.
+
+LANGUAGE EXAMPLE
+  created = signal_house.rcs.agents.create(
+    brand_id: "B1A2C3D", campaign_id: "C4E5F6G",
+    agent: { name: "Acme Alerts", description: "Order alerts from Acme" },
+    use_case: "TRANSACTIONAL", idempotency_key: SecureRandom.uuid)
+  agent_id = created["data"]["agentId"]
+  File.open("logo.png", "rb") do |image|
+    signal_house.rcs.agents.upload_asset(agent_id: agent_id, kind: "logo",
+      file: { filename: "logo.png", io: image, content_type: "image/png" })
+  end
+  check = signal_house.rcs.agents.validate(agent_id: agent_id)
+  signal_house.rcs.agents.submit(agent_id: agent_id) if check["data"]["valid"]
+  signal_house.rcs.agents.list(brand_id: "B1A2C3D", status: %w[DRAFT REJECTED])

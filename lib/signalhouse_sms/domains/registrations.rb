@@ -40,15 +40,16 @@ module SignalHouseSms
     # SIGNAL_HOUSE_REJECTED, SUBMITTING, PENDING_PROVIDER, NEEDS_INFORMATION, PAYMENT_REQUIRED, APPROVED, REJECTED,
     # CANCELLED, PENDING_DELETE, DELETED, EXPIRED, RECONCILIATION_REQUIRED. limit is at most 100.
     # phone_number filters to registrations holding this phone number.
+    # brand_id / campaign_id (RCS agents only) filter to agents linked to that 10DLC brand or campaign.
     # sort_by is createdAt (default), subgroupId, registrationId, region or status; sort_order is asc or desc (default).
     # Response: { data, totalCount, page, limit }.
     def get_registrations(group_id: nil, subgroup_id: nil, region: nil, type: nil, kind: nil, status: nil,
-                          parent_registration_id: nil, phone_number: nil, sort_by: nil, sort_order: nil, page: nil,
-                          limit: nil, **opts)
+                          parent_registration_id: nil, phone_number: nil, brand_id: nil, campaign_id: nil,
+                          sort_by: nil, sort_order: nil, page: nil, limit: nil, **opts)
       qs = @client.get_query_string(
         groupId: group_id, subgroupId: subgroup_id, region: region, type: type, kind: kind, status: status,
-        parentRegistrationId: parent_registration_id, phoneNumber: phone_number, sortBy: sort_by, sortOrder: sort_order,
-        page: page, limit: limit
+        parentRegistrationId: parent_registration_id, phoneNumber: phone_number, brandId: brand_id,
+        campaignId: campaign_id, sortBy: sort_by, sortOrder: sort_order, page: page, limit: limit
       )
       @client.request("/registration#{qs}", method: :get, token: opts[:token], headers: HttpClient.headers_for(opts))
     end
@@ -61,10 +62,53 @@ module SignalHouseSms
       @client.request("/registration/#{safe_id}", method: :get, token: opts[:token], headers: HttpClient.headers_for(opts))
     end
 
+    # PUT /registration/:registrationId
+    # Edit a draft, or a registration Signal House rejected, before submitting it (types that keep drafts, such as
+    # RCS_AGENT). data is a partial of the type's create fields: for RCS_AGENT agent and consent merge field by field,
+    # every other key replaces, and { campaignId: nil } unlinks the campaign. 409 once submitted. Returns the
+    # updated registration.
+    def update_registration(registration_id:, data:, **opts)
+      @client.require_params("registrationId" => registration_id, "data" => data)
+      safe_id = CGI.escape(registration_id.to_s)
+      @client.request("/registration/#{safe_id}", method: :put, body: data, token: opts[:token], headers: HttpClient.headers_for(opts))
+    end
+
+    # POST /registration/:registrationId/validate
+    # Check a draft against every submit requirement and the live state of its links, without writing.
+    # Returns { valid, errors: [{ field, reason }], warnings: [{ field, reason }] }.
+    def validate_registration(registration_id:, **opts)
+      @client.require_params("registrationId" => registration_id)
+      safe_id = CGI.escape(registration_id.to_s)
+      @client.request("/registration/#{safe_id}/validate", method: :post, token: opts[:token], headers: HttpClient.headers_for(opts))
+    end
+
+    # POST /registration/:registrationId/submit
+    # Submit a draft. A type Signal House reviews goes to SIGNAL_HOUSE_REVIEW; a type it does not (RCS_AGENT) goes to
+    # SUBMITTING and is filed with the provider at once. A draft that fails a requirement gets a 400 whose details carry
+    # { code: "REGISTRATION_INCOMPLETE", errors, warnings }; a second submit, or one of a registration the provider
+    # already holds, gets a 409. Returns the registration, now SIGNAL_HOUSE_REVIEW or SUBMITTING.
+    def submit_registration(registration_id:, **opts)
+      @client.require_params("registrationId" => registration_id)
+      safe_id = CGI.escape(registration_id.to_s)
+      @client.request("/registration/#{safe_id}/submit", method: :post, token: opts[:token], headers: HttpClient.headers_for(opts))
+    end
+
+    # POST /registration/:registrationId/launch
+    # Request the launch of a registration the provider already holds (an RCS agent in testing): the launch requirements
+    # are checked and the registration goes to SIGNAL_HOUSE_REVIEW, whose approval files the provider's launch request.
+    # Allowed while the provider reports the agent ready for testing, after a Signal House rejection, or after every
+    # carrier refused an earlier launch (409 otherwise); a failed requirement is a 400 whose details carry
+    # { code: "REGISTRATION_INCOMPLETE", errors, warnings }. Returns the registration, now SIGNAL_HOUSE_REVIEW.
+    def launch_registration(registration_id:, **opts)
+      @client.require_params("registrationId" => registration_id)
+      safe_id = CGI.escape(registration_id.to_s)
+      @client.request("/registration/#{safe_id}/launch", method: :post, token: opts[:token], headers: HttpClient.headers_for(opts))
+    end
+
     # DELETE /registration/:registrationId
     # Cancel a registration. Allowed from SIGNAL_HOUSE_REVIEW, SIGNAL_HOUSE_APPROVED, PENDING_PROVIDER,
-    # NEEDS_INFORMATION, PAYMENT_REQUIRED and APPROVED (409 otherwise). Numbers already allocated stay on the account
-    # and stop sending.
+    # NEEDS_INFORMATION, PAYMENT_REQUIRED and APPROVED (409 otherwise), and for types that keep drafts also from DRAFT
+    # and SIGNAL_HOUSE_REJECTED. Numbers already allocated stay on the account and stop sending.
     def cancel_registration(registration_id:, **opts)
       @client.require_params("registrationId" => registration_id)
       safe_id = CGI.escape(registration_id.to_s)

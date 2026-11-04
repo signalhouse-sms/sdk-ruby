@@ -5,7 +5,7 @@ require "securerandom"
 module SignalHouseSms
   class Client
     attr_reader :agents, :auth, :billing, :brands, :campaigns, :groups, :landings,
-                :messages, :notifications, :numbers, :registrations, :onboarding,
+                :messages, :notifications, :numbers, :registrations, :onboarding, :rcs,
                 :shortlinks, :subgroups, :subscriptions, :templates, :tickets, :users, :voice, :webhooks
 
     # Initialize a new SignalHouse client.
@@ -32,6 +32,7 @@ module SignalHouseSms
       @numbers        = Numbers.new(json_client, multipart_client, enable_admin)
       @registrations = Registrations.new(json_client, enable_admin)
       @onboarding     = Onboarding.new(json_client, enable_admin)
+      @rcs            = Rcs.new(json_client, multipart_client)
       @shortlinks     = Shortlinks.new(json_client, enable_admin)
       @subgroups      = Subgroups.new(json_client, enable_admin)
       @subscriptions  = Subscriptions.new(json_client, enable_admin)

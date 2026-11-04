@@ -147,22 +147,50 @@ result = client.brands.create_brand(
 puts result
 ```
 
-### List Toll-Free Business Verifications
+### Create a Toll-Free Brand
 
-When `required` is true, each new toll-free brand names a `VERIFIED` business verification as `tollFree.businessVerificationId`; add one with `create_business_verification`. Some groups verify each subgroup's business separately: a platform whose subgroups are separate businesses, set up by Signal House. For those groups `subgroup_id` is required, on both methods, and the response includes `subgroupId`.
+Some groups' toll-free brands are reviewed when they're submitted; `get_toll_free_requirements` says whether a group's are. A brand in such a group also needs five `tollFree` fields (`businessStructure`, `industry`, `contactEmail`, `contactJobTitle` and `contactJobLevel`), a `tollFree.countryCode` of `US` or `CA`, and a 2-letter `state`; any other group gets a 400 if it sends any of the five. The brand is `DCA_PENDING` until its business details pass review, then `DCA_ACTIVE`. If they don't pass, it becomes `DCA_REJECTED` with `tollFree.rejectionReason` saying why; fix it by creating the brand again with the corrected details. Its business details can't be changed after it's submitted.
 
 ```ruby
-result = client.brands.get_business_verifications(
-  group_id: "G0000001",
-  subgroup_id: "SG000001", # required when the group verifies each subgroup's business separately
+requirements = client.brands.get_toll_free_requirements(group_id: "G0000001", token: "your-jwt-token")
+raise requirements["error"] unless requirements["success"]
+
+toll_free = {
+  businessRegistrationType: "EIN",
+  legalEntityType: "PRIVATE_COMPANY",
+  taxId: "123456789",
+  countryCode: "US",
+  supportPhone: "15551234567"
+}
+if requirements["data"]["reviewsBusinessOnSubmit"]
+  toll_free.merge!(
+    businessStructure: "CORPORATION",
+    industry: "TECHNOLOGY",
+    contactEmail: "jane@mycompany.com",
+    contactJobTitle: "Operations Manager",
+    contactJobLevel: "DIRECTOR"
+  )
+end
+
+result = client.brands.create_toll_free_brand(
+  brand_data: {
+    subgroupId: "SG000001",
+    displayName: "My Brand",
+    companyName: "My Company Inc",
+    street: "123 Main St",
+    city: "New York",
+    state: "NY",
+    postalCode: "10001",
+    email: "contact@mycompany.com",
+    firstName: "Jane",
+    lastName: "Doe",
+    website: "https://mycompany.com",
+    tollFree: toll_free
+  },
   token: "your-jwt-token"
 )
 
-if result["success"]
-  result["data"]["businessVerifications"].each do |verification|
-    puts "#{verification['businessVerificationId']}: #{verification['status']}"
-  end
-end
+puts result
 ```
 
 ### Using Token Override
@@ -224,7 +252,7 @@ client.users.admin.create_internal_user(
 |--------|----------|---------|
 | Auth | `client.auth` | `login`, `reset_password`, `get_auth_history`, `get_oauth_links`, `create_oauth_link`, `create_oauth_reauth`, `confirm_oauth_reauth`, `confirm_oauth_link`, `delete_oauth_link`, `get_oauth_authorization_url` |
 | Billing | `client.billing` | `get_transaction_history`, `get_wallet`, `update_wallet`, `get_payment_methods`, `add_funds`, `add_payment_method`, `remove_payment_method`, `get_invoice_details`, `get_fees` |
-| Brands | `client.brands` | `get_brands`, `get_external_vetting`, `create_brand`, `get_business_verifications`, `get_business_verification`, `create_business_verification`, `update_business_verification`, `transfer_brand`, `create_external_vetting`, `update_brand`, `revet_brand`, `delete_brand` |
+| Brands | `client.brands` | `get_brands`, `get_external_vetting`, `create_brand`, `create_toll_free_brand`, `get_toll_free_requirements`, `transfer_brand`, `create_external_vetting`, `update_brand`, `revet_brand`, `delete_brand` |
 | Campaigns | `client.campaigns` | `get_campaigns`, `create_campaign`, `update_campaign`, `delete_campaign` |
 | Campaigns Admin | `client.campaigns.admin` | `approve_campaign`, `reject_campaign` |
 | Groups | `client.groups` | `get_group`, `update_group`, `get_sso_configuration`, `save_sso_connection`, `delete_sso_connection`, `add_sso_domain`, `verify_sso_domain`, `remove_sso_domain` |
@@ -238,6 +266,7 @@ client.users.admin.create_internal_user(
 | Subscriptions | `client.subscriptions` | `get_subscriptions`, `subscribe`, `unsubscribe` |
 | Subscriptions Admin | `client.subscriptions.admin` | `get_templates`, `create_template`, `update_template`, `delete_template`, `create_custom_subscription` |
 | Templates | `client.templates` | `create`, `list`, `get`, `update`, `publish`, `archive`, `versions`, `validate`, `capabilities`, `upload_media` |
+| RCS Agents | `client.rcs.agents` | `create`, `list`, `get`, `update`, `validate`, `submit`, `archive`, `upload_asset` |
 | Users | `client.users` | `get_users`, `create_user`, `create_service_user`, `update_user`, `delete_user`, `get_notification_preferences`, `update_notification_preferences` |
 | Users Admin | `client.users.admin` | `get_users`, `create_internal_user` |
 | Webhooks | `client.webhooks` | `get_webhooks`, `create_webhook`, `update_webhook`, `delete_webhook` |
