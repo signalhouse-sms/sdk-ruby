@@ -267,6 +267,7 @@ client.users.admin.create_internal_user(
 | Subscriptions Admin | `client.subscriptions.admin` | `get_templates`, `create_template`, `update_template`, `delete_template`, `create_custom_subscription` |
 | Templates | `client.templates` | `create`, `list`, `get`, `update`, `publish`, `archive`, `versions`, `validate`, `capabilities`, `upload_media` |
 | RCS Agents | `client.rcs.agents` | `create`, `list`, `get`, `update`, `validate`, `submit`, `archive`, `upload_asset` |
+| RCS Messages | `client.rcs.messages` | `send`, `validate`, `estimate`, `capabilities`, `get`, `list` |
 | Users | `client.users` | `get_users`, `create_user`, `create_service_user`, `update_user`, `delete_user`, `get_notification_preferences`, `update_notification_preferences` |
 | Users Admin | `client.users.admin` | `get_users`, `create_internal_user` |
 | Webhooks | `client.webhooks` | `get_webhooks`, `create_webhook`, `update_webhook`, `delete_webhook` |

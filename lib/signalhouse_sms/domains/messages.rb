@@ -31,7 +31,7 @@ module SignalHouseSms
     # GET /message?...
     # message_type accepts a single value or array (e.g. ["SMS", "MMS"]).
     # Allowed values: SMS, MMS, RCS, WHATSAPP, VIBER, P2P. When omitted, defaults to all non-P2P types.
-    # channel filters by "tenDLC", "virtualLongCode", "tollFree", "shortCode", or "p2p" (single value or array); older messages
+    # channel filters by "tenDLC", "virtualLongCode", "tollFree", "shortCode", "p2p", or "rcs" (single value or array); older messages
     # without a stored channel count as tenDLC.
     # sentiment_label filters by sentiment bucket: "positive", "neutral", or "negative" (single value or array).
     # It is applied as the sentimentScore range the label threshold produces, so unscored messages match no
@@ -54,7 +54,11 @@ module SignalHouseSms
     # array of OR-ed branches { region:, channels:, brandId:?, campaignId:?, phoneNumber:? } (channels: tenDLC,
     # virtualLongCode, tollFree, shortCode, p2p), JSON-encoded for the query; a String is sent as-is and [] matches
     # nothing.
-    def get_messages(id: nil, campaign_id: nil, registration_id: nil, brand_id: nil, subgroup_id: nil, group_id: nil, phone_number: nil, sender_phone_number: nil, recipient_phone_number: nil, status: nil, direction: nil, message_type: nil, channel: nil, region: nil, region_scopes: nil, carrier: nil, sentiment_label: nil, error_code: nil, start_date: nil, end_date: nil, sort_field: nil, sort_order: nil, page: nil, limit: nil, date_bounds: nil, **opts)
+    # RCS filters: template_id and template_version (messages sent from that template or version), bulk_id (the messages
+    # of one send), fallback_reason (NOT_CAPABLE, CARRIER_NOT_LAUNCHED, TTL_EXPIRED, RCS_ERROR, PROVIDER_ERROR, SMS_ONLY),
+    # billing_class (RICH, RICH_MEDIA), delivered_channel (rcs, sms, mms) and is_test (true for test messages only, false
+    # to leave them out).
+    def get_messages(id: nil, campaign_id: nil, registration_id: nil, brand_id: nil, subgroup_id: nil, group_id: nil, phone_number: nil, sender_phone_number: nil, recipient_phone_number: nil, status: nil, direction: nil, message_type: nil, channel: nil, region: nil, region_scopes: nil, carrier: nil, sentiment_label: nil, error_code: nil, start_date: nil, end_date: nil, sort_field: nil, sort_order: nil, page: nil, limit: nil, date_bounds: nil, template_id: nil, template_version: nil, bulk_id: nil, fallback_reason: nil, billing_class: nil, delivered_channel: nil, is_test: nil, **opts)
       token = opts[:token]
       headers = HttpClient.headers_for(opts)
       qs = @client.get_query_string(
@@ -63,7 +67,9 @@ module SignalHouseSms
         recipientPhoneNumber: recipient_phone_number, status: status, direction: direction,
         messageType: message_type, channel: channel, region: region, regionScopes: encode_region_scopes(region_scopes), carrier: carrier, sentimentLabel: sentiment_label,
         errorCode: error_code, startDate: start_date, endDate: end_date,
-        sortField: sort_field, sortOrder: sort_order, page: page, limit: limit, dateBounds: date_bounds
+        sortField: sort_field, sortOrder: sort_order, page: page, limit: limit, dateBounds: date_bounds,
+        templateId: template_id, templateVersion: template_version, bulkId: bulk_id, fallbackReason: fallback_reason,
+        billingClass: billing_class, deliveredChannel: delivered_channel, isTest: is_test
       )
       @client.request("/message#{qs}", method: :get, token: token, headers: headers)
     end
@@ -80,16 +86,15 @@ module SignalHouseSms
     # message_type scopes the SENTIMENT figures to "SMS", "MMS" or "P2P" (single value, array, or comma-separated
     # string); omit for all scored types. It does NOT narrow the message counts, which are always returned split per type.
     # carrier_family filters by the recipient's resolved carrier family (Default, ATT, TMobile, Verizon, USCellular, GoogleVoice, ClearSky, Interop, RogueMobile, P2P, Standard, IceWireless, Bell, Rogers, Telus, Videotron, SaskTel, Eastlink, Fibernetics); single value, array,
-    # or comma-separated string. Only accepted where the environment serves hourly analytics; elsewhere any value is rejected with a 400 -- omit the parameter unless it is wanted.
+    # or comma-separated string.
     # date_bounds is which contract binds start_date/end_date. "day": each bound is widened to its whole UTC day
     #. "exact": a timestamp is bound as the instant it names and a bare date is its
     # whole UTC day. Omitted: "day".
     # region filters by "US", "GB", or "CA" (any case of "UK"/"GB"/"GBR"/"United Kingdom" is accepted for GB; single value or array). region_scopes is an
     # array of OR-ed branches { region:, channels:, brandId:?, campaignId:?, phoneNumber:? } (channels: tenDLC,
     # virtualLongCode, tollFree, shortCode, p2p), JSON-encoded for the query; a String is sent as-is and [] matches
-    # nothing. Only accepted where the environment serves hourly analytics; elsewhere any value is rejected with a 400.
-    # registration_id filters to traffic attributed to these registrations (hourly analytics only; a 400 while hourly
-    # reads are off); single value or array. A phone_number filter takes precedence.
+    # nothing.
+    # registration_id filters to traffic attributed to these registrations; single value or array. A phone_number filter takes precedence.
     def get_analytics(group_id: nil, subgroup_id: nil, brand_id: nil, campaign_id: nil, registration_id: nil, phone_number: nil, carrier: nil, carrier_family: nil, start_date: nil, end_date: nil, channel: nil, region: nil, region_scopes: nil, message_type: nil, date_bounds: nil, **opts)
       token = opts[:token]
       headers = HttpClient.headers_for(opts)
@@ -113,24 +118,21 @@ module SignalHouseSms
     # message_type scopes the SENTIMENT figures to "SMS", "MMS" or "P2P" (single value, array, or comma-separated
     # string); omit for all scored types. It does NOT narrow the message counts, which are always returned split per type.
     # carrier_family filters by the recipient's resolved carrier family (Default, ATT, TMobile, Verizon, USCellular, GoogleVoice, ClearSky, Interop, RogueMobile, P2P, Standard, IceWireless, Bell, Rogers, Telus, Videotron, SaskTel, Eastlink, Fibernetics); single value, array,
-    # or comma-separated string. Only accepted where the environment serves hourly analytics; elsewhere any value is rejected with a 400 -- omit the parameter unless it is wanted.
+    # or comma-separated string.
     # granularity ("day" | "hour") is the time-bucket grain of the byDate rows. Omit for day (each row's _id is a
     # "YYYY-MM-DD" date). "hour" buckets by hour (each row's _id is a "YYYY-MM-DD HH:MM:SS" UTC hour; start_date is
-    # floored to its hour and end_date honoured as given) and is capped to a 7-day span. Only accepted where the
-    # environment serves hourly analytics; elsewhere any value, including "day", is rejected with a 400 -- omit it
-    # unless hour grain is wanted.
+    # floored to its hour and end_date honoured as given) and is capped to a 7-day span.
     # breakdown ("carrier" | "carrierFamily") adds a byBreakdown time × dimension series to the response
     # ({dimension, rows}: each row is one byDate bucket (_id) for one carrier or carrier family (key), top 50 keys
-    # by volume, excluding P2P) and caps the span at 31 days. Only accepted where the environment serves hourly analytics; elsewhere any value is rejected with a 400 -- omit the parameter unless it is wanted.
+    # by volume, excluding P2P) and caps the span at 31 days.
     # date_bounds is which contract binds start_date/end_date. "day": each bound is widened to its whole UTC day
     #. "exact": a timestamp is bound as the instant it names and a bare date is its
     # whole UTC day. Omitted: "day".
     # region filters by "US", "GB", or "CA" (any case of "UK"/"GB"/"GBR"/"United Kingdom" is accepted for GB; single value or array). region_scopes is an
     # array of OR-ed branches { region:, channels:, brandId:?, campaignId:?, phoneNumber:? } (channels: tenDLC,
     # virtualLongCode, tollFree, shortCode, p2p), JSON-encoded for the query; a String is sent as-is and [] matches
-    # nothing. Only accepted where the environment serves hourly analytics; elsewhere any value is rejected with a 400.
-    # registration_id filters to traffic attributed to these registrations (hourly analytics only; a 400 while hourly
-    # reads are off); single value or array. A phone_number filter takes precedence.
+    # nothing.
+    # registration_id filters to traffic attributed to these registrations; single value or array. A phone_number filter takes precedence.
     def get_analytics_detail(group_id: nil, subgroup_id: nil, brand_id: nil, campaign_id: nil, registration_id: nil, phone_number: nil, carrier: nil, carrier_family: nil, start_date: nil, end_date: nil, channel: nil, region: nil, region_scopes: nil, message_type: nil, granularity: nil, breakdown: nil, date_bounds: nil, **opts)
       token = opts[:token]
       headers = HttpClient.headers_for(opts)
@@ -145,8 +147,7 @@ module SignalHouseSms
 
     # Per-minute send throughput (peak segments per minute, sending minutes, minutes at a ceiling) per time
     # bucket and per carrier family, measured from SENT transitions at campaign x carrier-family grain -- the
-    # grain carrier ceilings are enforced at. Only accepted where the environment serves hourly analytics;
-    # elsewhere the request is rejected with a 400.
+    # grain carrier ceilings are enforced at.
     #
     # group_id is required; campaign_id wins over brand_id (single value or array); carrier_family filters by
     # family (ATT, TMobile, Verizon, USCellular, ...). start_date / end_date are ISO-8601 (span capped at 35
@@ -162,8 +163,7 @@ module SignalHouseSms
     # date_bounds is which contract binds start_date/end_date. "day": each bound is widened to its whole UTC day
     #. "exact": a timestamp is bound as the instant it names and a bare date is its
     # whole UTC day. Omitted: "day".
-    # registration_id filters to traffic attributed to these registrations (hourly analytics only; a 400 while hourly
-    # reads are off); single value or array.
+    # registration_id filters to traffic attributed to these registrations; single value or array.
     def get_analytics_throughput(group_id:, start_date:, end_date:, brand_id: nil, campaign_id: nil, registration_id: nil, carrier_family: nil, granularity: nil, ceiling: nil, date_bounds: nil, **opts)
       token = opts[:token]
       headers = HttpClient.headers_for(opts)
@@ -175,8 +175,7 @@ module SignalHouseSms
     end
 
     # GET /message/analytics/filter-options?...
-    # Returns subgroups, brands, campaigns, phoneNumbers, and carriers arrays. region restricts the options to "US", "GB", or "CA" (any case of "UK"/"GB"/"GBR"/"United Kingdom" is accepted for GB; single value or array). Only
-    # accepted where the environment serves hourly analytics; elsewhere any value is rejected with a 400.
+    # Returns subgroups, brands, campaigns, phoneNumbers, and carriers arrays. region restricts the options to "US", "GB", or "CA" (any case of "UK"/"GB"/"GBR"/"United Kingdom" is accepted for GB; single value or array).
     # Each phone number carries type (TOLL_FREE, SHORT_CODE, ALPHANUMERIC, VIRTUAL_LONG_NUMBER, ...) and country
     # (ISO-2), nil when unknown: TOLL_FREE, SHORT_CODE and ALPHANUMERIC are channels by type; any other US number is
     # 10DLC and a non-US one is a Virtual Long Code. carriers is a plain array of carrier name strings.
@@ -200,16 +199,15 @@ module SignalHouseSms
     # Omit for all scored types; it does not narrow the message counts, which are always returned
     # split per type and have no filterable type dimension.
     # carrier_family filters by the recipient's resolved carrier family (Default, ATT, TMobile, Verizon, USCellular, GoogleVoice, ClearSky, Interop, RogueMobile, P2P, Standard, IceWireless, Bell, Rogers, Telus, Videotron, SaskTel, Eastlink, Fibernetics); single value, array,
-    # or comma-separated string. Only accepted where the environment serves hourly analytics; elsewhere any value is rejected with a 400 -- omit the parameter unless it is wanted.
-    # registration_id filters to traffic attributed to these registrations (hourly analytics only; a 400 while hourly
-    # reads are off); single value or array. A phone_number filter takes precedence.
+    # or comma-separated string.
+    # registration_id filters to traffic attributed to these registrations; single value or array. A phone_number filter takes precedence.
     # date_bounds is which contract binds start_date/end_date. "day": each bound is widened to its whole UTC day
     #. "exact": a timestamp is bound as the instant it names and a bare date is its
     # whole UTC day. Omitted: "day".
     # region filters by "US", "GB", or "CA" (any case of "UK"/"GB"/"GBR"/"United Kingdom" is accepted for GB; single value or array). region_scopes is an
     # array of OR-ed branches { region:, channels:, brandId:?, campaignId:?, phoneNumber:? } (channels: tenDLC,
     # virtualLongCode, tollFree, shortCode, p2p), JSON-encoded for the query; a String is sent as-is and [] matches
-    # nothing. Only accepted where the environment serves hourly analytics; elsewhere any value is rejected with a 400.
+    # nothing.
     def get_analytics_by_subgroup(group_id:, subgroup_id: nil, brand_id: nil, campaign_id: nil, registration_id: nil, phone_number: nil, carrier: nil, carrier_family: nil, start_date: nil, end_date: nil, page: nil, limit: nil, channel: nil, region: nil, region_scopes: nil, message_type: nil, date_bounds: nil, **opts)
       token = opts[:token]
       headers = HttpClient.headers_for(opts)
@@ -228,16 +226,15 @@ module SignalHouseSms
     # array) — scopes ORDER BY + totalCount by the stored channel column; when one channel is
     # selected, totalErrors reflects only that channel.
     # carrier_family filters by the recipient's resolved carrier family (Default, ATT, TMobile, Verizon, USCellular, GoogleVoice, ClearSky, Interop, RogueMobile, P2P, Standard, IceWireless, Bell, Rogers, Telus, Videotron, SaskTel, Eastlink, Fibernetics); single value, array,
-    # or comma-separated string. Only accepted where the environment serves hourly analytics; elsewhere any value is rejected with a 400 -- omit the parameter unless it is wanted.
-    # registration_id filters to traffic attributed to these registrations (hourly analytics only; a 400 while hourly
-    # reads are off); single value or array. A phone_number filter takes precedence.
+    # or comma-separated string.
+    # registration_id filters to traffic attributed to these registrations; single value or array. A phone_number filter takes precedence.
     # date_bounds is which contract binds start_date/end_date. "day": each bound is widened to its whole UTC day
     #. "exact": a timestamp is bound as the instant it names and a bare date is its
     # whole UTC day. Omitted: "day".
     # region filters by "US", "GB", or "CA" (any case of "UK"/"GB"/"GBR"/"United Kingdom" is accepted for GB; single value or array). region_scopes is an
     # array of OR-ed branches { region:, channels:, brandId:?, campaignId:?, phoneNumber:? } (channels: tenDLC,
     # virtualLongCode, tollFree, shortCode, p2p), JSON-encoded for the query; a String is sent as-is and [] matches
-    # nothing. Only accepted where the environment serves hourly analytics; elsewhere any value is rejected with a 400.
+    # nothing.
     # error_code narrows the breakdown to a single failure reason: a numeric Infobip carrier code (as a string,
     # e.g. "607"), the Signal House campaign-opt-out code "OUT", or a no-code failure class (other, moderation,
     # att_limit, p2p_stop, campaign_opt_out, dnc_blocked, bind_hold_expired). Omitted: every reason.
@@ -271,9 +268,8 @@ module SignalHouseSms
     # region filters by "US", "GB", or "CA" (any case of "UK"/"GB"/"GBR"/"United Kingdom" is accepted for GB; single value or array). region_scopes is an
     # array of OR-ed branches { region:, channels:, brandId:?, campaignId:?, phoneNumber:? } (channels: tenDLC,
     # virtualLongCode, tollFree, shortCode, p2p), JSON-encoded for the query; a String is sent as-is and [] matches
-    # nothing. Only accepted where the environment serves hourly analytics; elsewhere any value is rejected with a 400.
-    # registration_id filters to traffic attributed to these registrations (hourly analytics only; a 400 while hourly
-    # reads are off); single value or array. A phone_number filter takes precedence.
+    # nothing.
+    # registration_id filters to traffic attributed to these registrations; single value or array. A phone_number filter takes precedence.
     def get_dnc_analytics(group_id: nil, subgroup_id: nil, brand_id: nil, campaign_id: nil, registration_id: nil, phone_number: nil, carrier: nil, start_date: nil, end_date: nil, channel: nil, region: nil, region_scopes: nil, date_bounds: nil, **opts)
       token = opts[:token]
       headers = HttpClient.headers_for(opts)
@@ -295,15 +291,14 @@ module SignalHouseSms
     # shipped — and carrierFamily, the resolved carrier family of the recipient number (Default, ATT, TMobile,
     # Verizon, USCellular, GoogleVoice, ClearSky, Interop, RogueMobile, Standard, IceWireless, Bell, Rogers, Telus, Videotron, SaskTel, Eastlink, Fibernetics), copied from the inbound message that
     # triggered the opt-out.
-    # registration_id filters to traffic attributed to these registrations (hourly analytics only; a 400 while hourly
-    # reads are off); single value or array. A phone_number filter takes precedence.
+    # registration_id filters to traffic attributed to these registrations; single value or array. A phone_number filter takes precedence.
     # date_bounds is which contract binds start_date/end_date. "day": each bound is widened to its whole UTC day
     #. "exact": a timestamp is bound as the instant it names and a bare date is its
     # whole UTC day. Omitted: "day".
     # region filters by "US", "GB", or "CA" (any case of "UK"/"GB"/"GBR"/"United Kingdom" is accepted for GB; single value or array). region_scopes is an
     # array of OR-ed branches { region:, channels:, brandId:?, campaignId:?, phoneNumber:? } (channels: tenDLC,
     # virtualLongCode, tollFree, shortCode, p2p), JSON-encoded for the query; a String is sent as-is and [] matches
-    # nothing. Only accepted where the environment serves hourly analytics; elsewhere any value is rejected with a 400.
+    # nothing.
     def get_dnc_records(group_id: nil, subgroup_id: nil, brand_id: nil, campaign_id: nil, registration_id: nil, phone_number: nil, carrier: nil, start_date: nil, end_date: nil, page: nil, limit: nil, sort_field: nil, sort_order: nil, channel: nil, region: nil, region_scopes: nil, date_bounds: nil, **opts)
       token = opts[:token]
       headers = HttpClient.headers_for(opts)
@@ -365,6 +360,16 @@ module SignalHouseSms
       body[:subgroupId] = subgroup_id if subgroup_id
       body[:useSignalHouseShortlinks] = use_signal_house_shortlinks unless use_signal_house_shortlinks.nil?
       @client.request("/message/p2p", method: :post, body: body, token: token, headers: headers)
+    end
+
+    # GET /message/:id
+    # One message of any type by its ID; an unknown ID is a 404.
+    def get_message(id:, **opts)
+      @client.require_params("id" => id)
+      token = opts[:token]
+      headers = HttpClient.headers_for(opts)
+      safe_id = CGI.escape(id.to_s)
+      @client.request("/message/#{safe_id}", method: :get, token: token, headers: headers)
     end
 
     # GET /message/p2p/batches/:batchId

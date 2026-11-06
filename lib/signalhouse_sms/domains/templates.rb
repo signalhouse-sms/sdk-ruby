@@ -55,7 +55,8 @@ module SignalHouseSms
     # POST /template
     # Create a template whose first draft (version 1) holds body, the raw template body (e.g. an RcsTemplateBody
     # { channel, contentFormat (optional; "content.v1" by default, or "google.rcs"), content, variables, defaults, fallback }).
-    # Returns 201 with { head, version }.
+    # Returns 201 with { head, version, validation }. validation is { valid, errors, warnings }, or nil when the checks
+    # could not run; the draft saves even when it lists errors.
     def create(group_id:, name:, body:, tag: nil, **opts)
       @client.require_params("groupId" => group_id, "name" => name, "body" => body)
       payload = create_payload(group_id, name, body, tag)
@@ -88,7 +89,8 @@ module SignalHouseSms
     # PUT /template/:templateId
     # Save the draft; writes apply directly (last write wins). tag: nil clears the tag and leaving it out
     # keeps it. body is a full replacement. An archived template answers 409 TEMPLATE_ARCHIVED and a
-    # name already in use 409 TEMPLATE_NAME_TAKEN. Returns { head, version }.
+    # name already in use 409 TEMPLATE_NAME_TAKEN. Returns { head, version, validation }; the draft saves even when
+    # validation lists errors.
     def update(template_id:, group_id:, name: nil, tag: UNSET, body: nil, **opts)
       @client.require_params("templateId" => template_id, "groupId" => group_id)
       safe_id = CGI.escape(template_id.to_s)
@@ -98,7 +100,7 @@ module SignalHouseSms
 
     # POST /template/:templateId/publish
     # Publish the current draft; no draft answers 409 NO_DRAFT, a draft that changed while it was being published
-    # 409 DRAFT_CHANGED (publish again), and an incomplete draft 400 TEMPLATE_INVALID. Returns { head, version }.
+    # 409 DRAFT_CHANGED (publish again), and an incomplete draft 400 TEMPLATE_INVALID. Returns { head, version, warnings }.
     def publish(template_id:, group_id:, **opts)
       @client.require_params("templateId" => template_id, "groupId" => group_id)
       safe_id = CGI.escape(template_id.to_s)

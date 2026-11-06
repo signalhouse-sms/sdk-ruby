@@ -40,7 +40,7 @@ module SignalHouseSms
     # SIGNAL_HOUSE_REJECTED, SUBMITTING, PENDING_PROVIDER, NEEDS_INFORMATION, PAYMENT_REQUIRED, APPROVED, REJECTED,
     # CANCELLED, PENDING_DELETE, DELETED, EXPIRED, RECONCILIATION_REQUIRED. limit is at most 100.
     # phone_number filters to registrations holding this phone number.
-    # brand_id / campaign_id (RCS agents only) filter to agents linked to that 10DLC brand or campaign.
+    # brand_id / campaign_id (RCS agents only) filter to agents linked to that brand or campaign.
     # sort_by is createdAt (default), subgroupId, registrationId, region or status; sort_order is asc or desc (default).
     # Response: { data, totalCount, page, limit }.
     def get_registrations(group_id: nil, subgroup_id: nil, region: nil, type: nil, kind: nil, status: nil,
@@ -99,6 +99,7 @@ module SignalHouseSms
     # Allowed while the provider reports the agent ready for testing, after a Signal House rejection, or after every
     # carrier refused an earlier launch (409 otherwise); a failed requirement is a 400 whose details carry
     # { code: "REGISTRATION_INCOMPLETE", errors, warnings }. Returns the registration, now SIGNAL_HOUSE_REVIEW.
+    # An RCS agent's launch request charges its launch fees: a wallet that cannot cover them gets a 402, and nothing changes.
     def launch_registration(registration_id:, **opts)
       @client.require_params("registrationId" => registration_id)
       safe_id = CGI.escape(registration_id.to_s)

@@ -1,11 +1,11 @@
 # frozen_string_literal: true
 
 module SignalHouseSms
-  # RCS agents under /rcs/agent. An agent links one 10DLC brand and one 10DLC campaign: the campaign's numbers are the
-  # SMS fallback, and the brand and campaign supply the company identity and consent text for the carrier launch. One
-  # brand or campaign can serve many agents. An agent is a registration (type RCS_AGENT, id RCSA...), so the
-  # registrations methods read and edit the same record. 404 while the environment's RCS switch is off; 400 while the
-  # group's rcsEnabled flag is off.
+  # RCS agents under /rcs/agent. An agent links one brand and one campaign, of any registration type: the campaign's
+  # numbers are the SMS fallback, and the brand and campaign supply the company identity and consent text for the
+  # carrier launch. One brand or campaign can serve many agents. An agent is a registration (type RCS_AGENT, id
+  # RCSA...), so the registrations methods read and edit the same record. 404 while the environment's RCS switch is
+  # off; 400 while the group's rcsEnabled flag is off.
   class RcsAgents
     # Default for campaign_id, use_case and default_fallback: leaving one out omits it and nil sends null.
     UNSET = Object.new.freeze
@@ -16,7 +16,7 @@ module SignalHouseSms
     end
 
     # POST /rcs/agent
-    # Create an agent draft on a 10DLC brand (carrier brand ID, provisional UUID or _id), optionally with campaign_id, a
+    # Create an agent draft on a brand (carrier brand ID, provisional UUID or _id), optionally with campaign_id, a
     # campaign ID or _id of that brand (required before submit). The agent's subgroup is the brand's. agent is the
     # profile { name, description, color, logoUrl, heroUrl, phone, website, email, phoneLabel, websiteLabel, emailLabel
     # (captions, max 40; submit defaults them to Call, Website and Email), privacyPolicyUrl, termsUrl }; consent is the
@@ -37,7 +37,7 @@ module SignalHouseSms
 
     # GET /rcs/agent?...
     # List agents, newest first. status is DRAFT, PENDING_REVIEW, REJECTED, AGENT_CREATING or ARCHIVED, one or a list
-    # (String or Array, sent comma-separated). brand_id / campaign_id return the agents linked to that 10DLC brand or
+    # (String or Array, sent comma-separated). brand_id / campaign_id return the agents linked to that brand or
     # campaign. limit defaults to 25 (max 100). Response: { data: [agents], total, page, limit }.
     def list(group_id: nil, subgroup_id: nil, status: nil, brand_id: nil, campaign_id: nil, page: nil, limit: nil, **opts)
       qs = @client.get_query_string(
@@ -56,7 +56,7 @@ module SignalHouseSms
     # PUT /rcs/agent/:agentId
     # Edit an agent while it may change: a draft, a Signal House rejection, a request for changes, or an agent in
     # testing (the change is pushed to the carrier partner); only the arguments passed are sent. agent, consent and
-    # contact merge field by field and every other key replaces. brand_id relinks to another 10DLC brand of the same
+    # contact merge field by field and every other key replaces. brand_id relinks to another brand of the same
     # subgroup (locked once the agent exists at the partner); campaign_id: nil unlinks the campaign; use_case: nil and
     # default_fallback: nil clear those fields; billing_category is locked once a launch was requested. 409 in any
     # other status. Returns the agent.
@@ -87,6 +87,7 @@ module SignalHouseSms
     # PENDING_REVIEW), whose approval files the launch with the carrier partner. Allowed from IN_TESTING, REJECTED and
     # CARRIER_REJECTED (409 otherwise); a failed requirement is a 400 whose details carry
     # { code: "REGISTRATION_INCOMPLETE", errors, warnings }. Returns the agent (status PENDING_REVIEW).
+    # The request charges the agent's launch fees: a wallet that cannot cover them gets a 402, and the agent stays where it is. The agent's launchFees quotes what the next request charges.
     def launch(agent_id:, **opts)
       @client.require_params("agentId" => agent_id)
       safe_id = CGI.escape(agent_id.to_s)
@@ -152,13 +153,115 @@ module SignalHouseSms
     end
   end
 
+  # RCS messages. Sends go through an agent to POST /message/rcs. A message is a Message record (messageType RCS), so the
+  # messages methods read the same record. 404 while the environment's RCS switch is off; 403 while the group's rcsEnabled
+  # flag is off; 409 while the agent cannot send yet.
+  class RcsMessages
+    def initialize(client)
+      @client = client
+    end
+
+    # POST /message/rcs
+    # Send to up to 100 recipients, each { phoneNumber, variables, clientMessageId, metadata }. A check that blocks one
+    # recipient writes a BLOCKED message for it and the rest still send. Exactly one of template_id or content;
+    # template_version needs template_id; at most one of ttl_seconds or expire_time. content_format is content.v1 (default)
+    # or google.rcs. traffic_type is AUTHENTICATION, TRANSACTION, SERVICEREQUEST, ACKNOWLEDGEMENT or PROMOTION, required on
+    # a MULTI_USE agent when the template sets none. fallback is { mode (auto, rcs_only, sms_only), channel (auto, sms,
+    # mms), from, content: { text, mediaUrls }, validitySeconds }; from is a Ready number on the agent's linked Active
+    # campaign, and if content is omitted the template's fallback, else a generated one, is used. simulate is not_capable,
+    # ttl_expired, delivered or read; is_test and simulate reach approved testers only. Returns 201 with
+    # { requested, enqueued, failed, bulkId, messages }. A blocked row carries blockReason, reason and issues; an archived template answers 409 TEMPLATE_ARCHIVED.
+    def send(agent_id:, recipients:, template_id: nil, template_version: nil, content: nil, content_format: nil, traffic_type: nil,
+             ttl_seconds: nil, expire_time: nil, fallback: nil, status_callback_url: nil, enable_shortlink: nil, is_test: nil,
+             simulate: nil, **opts)
+      @client.require_params("agentId" => agent_id, "recipients" => recipients)
+      post("/message/rcs", { agentId: agent_id, recipients: recipients, templateId: template_id, templateVersion: template_version,
+                             content: content, contentFormat: content_format, trafficType: traffic_type, ttlSeconds: ttl_seconds,
+                             expireTime: expire_time, fallback: fallback, statusCallbackUrl: status_callback_url,
+                             enableShortlink: enable_shortlink, isTest: is_test, simulate: simulate }, opts)
+    end
+
+    # POST /message/rcs/validate
+    # Run a send's checks without writing anything or holding funds. Takes the same arguments as send. Returns { valid, errors,
+    # warnings, billingClass, segments, estimatedCostMicros, unsupportedFiles, recipients }. valid is true only with no errors;
+    # each blocked recipient adds an error and carries blockReason, reason and issues.
+    def validate(agent_id:, recipients:, template_id: nil, template_version: nil, content: nil, content_format: nil, traffic_type: nil,
+                 ttl_seconds: nil, expire_time: nil, fallback: nil, status_callback_url: nil, enable_shortlink: nil, is_test: nil,
+                 simulate: nil, **opts)
+      @client.require_params("agentId" => agent_id, "recipients" => recipients)
+      post("/message/rcs/validate", { agentId: agent_id, recipients: recipients, templateId: template_id, templateVersion: template_version,
+                                      content: content, contentFormat: content_format, trafficType: traffic_type, ttlSeconds: ttl_seconds,
+                                      expireTime: expire_time, fallback: fallback, statusCallbackUrl: status_callback_url,
+                                      enableShortlink: enable_shortlink, isTest: is_test, simulate: simulate }, opts)
+    end
+
+    # POST /message/estimate (with channel "rcs")
+    # Price an RCS draft in microdollars; no charge or send. Exactly one of recipients or recipient_count; with a count,
+    # carriers are unknown and the default fees apply. The other arguments are as on send, but the fallback's from is
+    # optional for an estimate; with none, the fallback leg is priced on the channel of the agent's linked campaign.
+    # Returns { billingClass, segments, recipientCount, rcsLeg, fallbackLeg, totals, balance, issues, warnings }.
+    # rcsLeg.mediaSurcharge is the carrier's surcharge on media over 5 MB, already inside rcsLeg.cost; a message over 100 MB adds a MEDIA_TOO_LARGE issue.
+    def estimate(agent_id:, recipients: nil, recipient_count: nil, template_id: nil, template_version: nil, content: nil, content_format: nil,
+                 traffic_type: nil, ttl_seconds: nil, expire_time: nil, fallback: nil, **opts)
+      @client.require_params("agentId" => agent_id)
+      post("/message/estimate", { channel: "rcs", agentId: agent_id, recipients: recipients, recipientCount: recipient_count,
+                                  templateId: template_id, templateVersion: template_version, content: content,
+                                  contentFormat: content_format, trafficType: traffic_type, ttlSeconds: ttl_seconds,
+                                  expireTime: expire_time, fallback: fallback }, opts)
+    end
+
+    # POST /rcs/capabilities
+    # Report which numbers (up to 500, 10-15 digits, with or without the +) can receive RCS from an agent. Returns
+    # { results: [{ phoneNumber, capability }] }, capability being ENABLED, UNREACHABLE or UNKNOWN.
+    def capabilities(agent_id:, phone_numbers:, **opts)
+      @client.require_params("agentId" => agent_id, "phoneNumbers" => phone_numbers)
+      post("/rcs/capabilities", { agentId: agent_id, phoneNumbers: phone_numbers }, opts)
+    end
+
+    # GET /message/:messageId
+    # One message by its ID; an unknown ID is a 404. The same route as messages.get_message.
+    def get(message_id:, **opts)
+      @client.require_params("messageId" => message_id)
+      safe_id = CGI.escape(message_id.to_s)
+      @client.request("/message/#{safe_id}", method: :get, token: opts[:token], headers: HttpClient.headers_for(opts))
+    end
+
+    # GET /message?messageType=RCS&...
+    # List RCS messages. group_id, from and to are required; agent_id is sent as registrationId, from as startDate and to
+    # as endDate (ISO-8601 dates or timestamps). status is ENQUEUED, DEQUEUED, SENT, FAILED, DELIVERED, READ, EXPIRED,
+    # FALLBACK or BLOCKED; bulk_id selects the messages of one send; fallback_reason is NOT_CAPABLE, CARRIER_NOT_LAUNCHED,
+    # TTL_EXPIRED, RCS_ERROR, PROVIDER_ERROR or SMS_ONLY; billing_class is RICH or RICH_MEDIA; delivered_channel is rcs,
+    # sms or mms; is_test true returns test messages only and false leaves them out. A fallback leg is an SMS or MMS
+    # message: read it with messages.get_message and the parent's fallbackMessageId.
+    def list(group_id:, from:, to:, agent_id: nil, status: nil, page: nil, limit: nil, template_id: nil,
+             template_version: nil, bulk_id: nil, fallback_reason: nil, billing_class: nil, delivered_channel: nil, is_test: nil,
+             **opts)
+      @client.require_params("groupId" => group_id, "from" => from, "to" => to)
+      qs = @client.get_query_string(
+        registrationId: agent_id, startDate: from, endDate: to, groupId: group_id, status: status, page: page, limit: limit,
+        templateId: template_id, templateVersion: template_version, bulkId: bulk_id, fallbackReason: fallback_reason,
+        billingClass: billing_class, deliveredChannel: delivered_channel, isTest: is_test, messageType: "RCS"
+      )
+      @client.request("/message#{qs}", method: :get, token: opts[:token], headers: HttpClient.headers_for(opts))
+    end
+
+    private
+
+    # POST a JSON body, leaving out the nil fields.
+    def post(path, fields, opts)
+      @client.request(path, method: :post, body: fields.compact, token: opts[:token], headers: HttpClient.headers_for(opts))
+    end
+  end
+
   # RCS (Google RBM) resources, accessed via `client.rcs`. Templates for RCS live under `client.templates`.
-  #   * client.rcs.agents — RCS agents linked to a 10DLC brand and campaign
+  #   * client.rcs.agents — RCS agents linked to a brand and campaign
+  #   * client.rcs.messages — RCS sends, estimates, capabilities and message reads
   class Rcs
-    attr_reader :agents
+    attr_reader :agents, :messages
 
     def initialize(client, multipart_client)
       @agents = RcsAgents.new(client, multipart_client)
+      @messages = RcsMessages.new(client)
     end
   end
 end

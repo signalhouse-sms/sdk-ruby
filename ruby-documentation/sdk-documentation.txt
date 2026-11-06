@@ -393,8 +393,15 @@ MESSAGES  (signal_house.messages)
       message_type: nil, carrier: nil, sentiment_label: nil,
       error_code: nil, start_date: nil, end_date: nil,
       sort_field: nil, sort_order: nil, page: nil, limit: nil,
-      token: nil, headers: nil)
-    List messages with extensive filters.
+      template_id: nil, template_version: nil, bulk_id: nil,
+      fallback_reason: nil, billing_class: nil, delivered_channel: nil,
+      is_test: nil, token: nil, headers: nil)
+    List messages with extensive filters. template_id, template_version,
+    bulk_id, fallback_reason, billing_class, delivered_channel and is_test
+    filter RCS messages.
+
+  get_message(id:)
+    GET /message/:id. Get one message of any type. An unknown ID is a 404. Required: id
 
   get_analytics(group_id: nil, subgroup_id: nil, brand_id: nil,
       campaign_id: nil, registration_id: nil, phone_number: nil, carrier: nil,
@@ -830,7 +837,7 @@ to every message from it, counted in segments and in the estimate.
 
 GET /registration accepts groupId, subgroupId, region, type, kind, status,
 parentRegistrationId, phoneNumber (filter to registrations holding this phone
-number), brandId, campaignId (RCS agents linked to that 10DLC brand or campaign;
+number), brandId, campaignId (RCS agents linked to that brand or campaign;
 brand_id: and campaign_id: in Ruby), sortBy (createdAt (default), subgroupId, registrationId, region or
 status), sortOrder (asc or desc (default)), page and limit (max 100) and returns
 {data,totalCount,page,limit}.
@@ -895,20 +902,18 @@ shortCode and p2p; [] matches nothing and omitting both keeps the existing scope
 Example:
 [{"region":"US","channels":["tenDLC"],"brandId":["BUS1"]},
  {"region":"GB","channels":["virtualLongCode"],"phoneNumber":["447400123456"]}]
-GET /message always accepts them; the analytics and DNC reads accept them only
-where the environment serves hourly analytics and reject them with a 400 elsewhere.
+GET /message always accepts them, as do the analytics and DNC reads.
 
 get_analytics, get_analytics_detail, get_analytics_throughput and
 get_dnc_analytics accept registration_id (a single id or an array, sent comma-
-joined like campaign_id): filter to traffic attributed to these registrations
-(hourly analytics only; a 400 while hourly reads are off). Except on
+joined like campaign_id): filter to traffic attributed to these registrations. Except on
 get_analytics_throughput, which has no phoneNumber filter, a phoneNumber filter
 takes precedence. get_phone_numbers accepts a single registration_id to list the
 numbers provisioned under that registration.
 
 get_analytics_by_subgroup, get_analytics_by_error_code and get_dnc_records accept
-registration_id the same way, with the same hourly-only rule and precedence.
-get_messages accepts registration_id in every environment: it filters to messages
+registration_id the same way, with the same precedence.
+get_messages accepts registration_id: it filters to messages
 attributed to those registrations, and a phone_number filter narrows further. Every
 method returns 400 when registration_id is combined with campaign_id.
 
@@ -965,7 +970,9 @@ A template has a head {templateId, groupId, channel, name, tag,
 archivedAt, draftVersion, publishedVersion, revision,
 createdBy, createdAt, updatedAt} and numbered versions
 {version, state (DRAFT|PUBLISHED), body, contentHash, publishedAt, ...}. Reads
-of one template return {head, version}; lists return {data, total, page, limit}
+of one template return {head, version}; lists return {data, total, page, limit}.
+The create and update responses add validation ({valid, errors, warnings}, null when the checks could not run), and publish adds warnings. A draft saves even when validation lists errors. On an RCS send, a blocked row carries blockReason, reason and issues.
+
 with summaries that add state and hasUnpublishedChanges.
 
 create creates draft version 1 from name (1-120 chars, unique per
@@ -979,7 +986,8 @@ current draft; no draft answers 409 {code:"NO_DRAFT"}, a draft that changed whil
 it was being published 409 {code:"DRAFT_CHANGED"} (publish again), and an
 incomplete draft 400 {code:"TEMPLATE_INVALID", errors, warnings}. archive takes only groupId. validate checks
 exactly one of body or version and never writes. capabilities returns the
-server's block kinds, action types, limits and media rules, and with provider
+server's block kinds, action types, limits, media rules, time to live ranges,
+traffic types per use case and iPhone layout numbers, and with provider
 (infobip|sinch) that provider's limits and unsupported features.
 upload_media sends multipart fields file and groupId and returns
 {mediaId, url, bytes, mimeType, kind, width, height, ...} (201).
@@ -1021,11 +1029,11 @@ LANGUAGE EXAMPLE
 
 RCS AGENTS  (signal_house.rcs.agents)
 --------------------------------------------------------------------------------
-RCS agents under /rcs/agent. An agent links one 10DLC brand and one 10DLC
-campaign: the campaign's numbers are its SMS fallback, and the brand and
-campaign supply the company identity and consent text for the carrier launch.
-One brand or campaign can serve many agents. An agent is a registration (type
-RCS_AGENT, agentId = registrationId "RCSA" + 10 characters), so the
+RCS agents under /rcs/agent. An agent links one brand and one campaign, of any
+registration type: the campaign's numbers are its SMS fallback, and the brand
+and campaign supply the company identity and consent text for the carrier
+launch. One brand or campaign can serve many agents. An agent is a registration
+(type RCS_AGENT, agentId = registrationId "RCSA" + 10 characters), so the
 registrations methods read and edit the same record. 404 while RCS is disabled
 for the environment; 400 while the group's rcsEnabled flag is off. To use a new
 brand and campaign, create the brand (brands.create_brand), wait until it is
@@ -1083,6 +1091,9 @@ launch(agent_id:)
   Signal House's approval files the launch with the carrier partner. Allowed
   from IN_TESTING, REJECTED and CARRIER_REJECTED (409 otherwise); a failed
   requirement is 400 REGISTRATION_INCOMPLETE.
+  The request charges the agent's launch fees: a wallet that cannot cover
+  them gets a 402, and the agent stays where it is.
+  The agent's launchFees quotes what the next request charges.
 
 archive(agent_id:)
   Archive the agent.
@@ -1111,3 +1122,70 @@ LANGUAGE EXAMPLE
   check = signal_house.rcs.agents.validate(agent_id: agent_id)
   signal_house.rcs.agents.submit(agent_id: agent_id) if check["data"]["valid"]
   signal_house.rcs.agents.list(brand_id: "B1A2C3D", status: %w[DRAFT REJECTED])
+
+
+RCS MESSAGES  (signal_house.rcs.messages)
+--------------------------------------------------------------------------------
+  Send through an agent. 404 while RCS is off for the environment, 403 while
+  the group's rcsEnabled flag is off, 409 while the agent cannot send yet.
+
+  send(agent_id:, recipients:, template_id: nil, template_version: nil,
+      content: nil, content_format: nil, traffic_type: nil, ttl_seconds: nil,
+      expire_time: nil, fallback: nil, status_callback_url: nil,
+      enable_shortlink: nil, is_test: nil, simulate: nil)
+    POST /message/rcs.
+    Send to up to 100 recipients. A blocked recipient gets a BLOCKED message and
+    the rest still send. Exactly one of template_id or content; at most one of
+    ttl_seconds or expire_time. content_format: content.v1 (default) | google.rcs.
+    recipients is a list of { phoneNumber, variables, clientMessageId, metadata }.
+    fallback is { mode (auto, rcs_only, sms_only), channel (auto, sms, mms), from,
+    content: { text, mediaUrls }, validitySeconds }; without content the
+    template's fallback, else a generated one, is used. simulate: not_capable |
+    ttl_expired | delivered | read, approved testers only.
+    Required: agent_id, recipients
+    Returns: { requested, enqueued, failed, bulkId, messages } (201)
+
+  validate(agent_id:, recipients:, ...)
+    POST /message/rcs/validate. Check a send; writes nothing. Takes the same
+    arguments as send. Required: agent_id, recipients
+    Returns: { valid, errors, warnings, billingClass, segments,
+    estimatedCostMicros, unsupportedFiles, recipients }. It runs a send's
+    checks and holds no funds. valid is true only with no errors.
+
+  estimate(agent_id:, recipients: nil, recipient_count: nil,
+      template_id: nil, template_version: nil, content: nil,
+      content_format: nil, traffic_type: nil, ttl_seconds: nil,
+      expire_time: nil, fallback: nil)
+    POST /message/estimate with channel "rcs" added. Price a draft in
+    microdollars; no charge or send. Exactly one of recipients or
+    recipient_count. The fallback's from is optional for an estimate; with
+    none, the fallback leg is priced on the channel of the agent's linked
+    campaign. Required: agent_id
+    Returns: { billingClass, segments, recipientCount, rcsLeg, fallbackLeg,
+    totals, balance, issues, warnings }
+    rcsLeg.mediaSurcharge is the carrier's surcharge on media over 5 MB,
+    already inside rcsLeg.cost; a message over 100 MB adds a MEDIA_TOO_LARGE
+    issue.
+
+  capabilities(agent_id:, phone_numbers:)
+    POST /rcs/capabilities. Report which numbers (up to 500) can receive RCS.
+    Required: agent_id, phone_numbers
+    Returns: { results: [{ phoneNumber, capability }] }, capability being
+    ENABLED, UNREACHABLE or UNKNOWN
+
+  get(message_id:)
+    GET /message/:messageId. Get one message; the same route as
+    messages.get_message. Required: message_id
+
+  list(group_id:, from:, to:, agent_id: nil, status: nil, page: nil,
+      limit: nil, template_id: nil, template_version: nil, bulk_id: nil,
+      fallback_reason: nil, billing_class: nil, delivered_channel: nil,
+      is_test: nil)
+    GET /message with messageType=RCS. agent_id is sent as registrationId,
+    from as startDate and to as endDate. A fallback leg is an SMS or MMS
+    message: read it with messages.get_message and the parent's
+    fallbackMessageId.
+    Required: group_id, from, to
+
+  Pass idempotency_key: on send to make a retry safe (see IDEMPOTENT REQUESTS).
+  send here replaces Object#send on this class; use __send__ for dynamic dispatch.

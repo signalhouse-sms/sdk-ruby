@@ -9,6 +9,7 @@ require "stringio"
 require "securerandom"
 require "signalhouse_sms/errors"
 require "signalhouse_sms/http_client"
+require "signalhouse_sms/domains/messages"
 require "signalhouse_sms/domains/rcs"
 require "signalhouse_sms/domains/registrations"
 
@@ -137,4 +138,90 @@ check(query_of(sent[4][0]) == { "type" => "RCS_AGENT", "brandId" => "BXYZ123", "
 error = raises?(SignalHouseSms::ValidationError) { registrations.update_registration(registration_id: agent_id, data: nil) }
 check(error && error.message.include?("data"), "update_registration requires data")
 
-puts "RCS Ruby contracts passed (agents CRUD and lifecycle, multipart asset upload, registration drafts and filters)"
+messages = rcs.messages
+check(messages.is_a?(SignalHouseSms::RcsMessages), "rcs exposes messages")
+recipients = [{ phoneNumber: "+15125550199", variables: { name: "Ada" } }]
+fallback = { mode: "auto", channel: "sms", from: "15125550100", content: { text: "Hi" }, validitySeconds: 600 }
+
+messages.send(agent_id: agent_id, recipients: recipients, content: { blocks: [] }, content_format: "content.v1",
+              traffic_type: "TRANSACTION", ttl_seconds: 900, fallback: fallback, status_callback_url: "https://example.com/cb",
+              enable_shortlink: false, is_test: true, simulate: "delivered", idempotency_key: "k1")
+path, options = client.calls.last
+check(path == "/message/rcs" && options[:method] == :post, "send path")
+check(options[:headers] == { "Idempotency-Key" => "k1" }, "send idempotency")
+check(options[:body] == { agentId: agent_id, recipients: recipients, content: { blocks: [] }, contentFormat: "content.v1",
+                          trafficType: "TRANSACTION", ttlSeconds: 900, fallback: fallback,
+                          statusCallbackUrl: "https://example.com/cb", enableShortlink: false, isTest: true, simulate: "delivered" },
+      "send body keeps false and drops nil")
+messages.send(agent_id: agent_id, recipients: recipients, template_id: "T1", template_version: 2, expire_time: "2026-11-05T00:00:00Z")
+check(client.calls.last[1][:body] == { agentId: agent_id, recipients: recipients, templateId: "T1", templateVersion: 2,
+                                       expireTime: "2026-11-05T00:00:00Z" }, "send template body")
+error = raises?(SignalHouseSms::ValidationError) { messages.send(agent_id: nil, recipients: recipients) }
+check(error && error.message.include?("agentId"), "send requires agentId")
+error = raises?(SignalHouseSms::ValidationError) { messages.send(agent_id: agent_id, recipients: nil) }
+check(error && error.message.include?("recipients"), "send requires recipients")
+
+messages.validate(agent_id: agent_id, recipients: recipients, template_id: "T1", simulate: "read")
+path, options = client.calls.last
+check(path == "/message/rcs/validate" && options[:method] == :post, "validate path")
+check(options[:body] == { agentId: agent_id, recipients: recipients, templateId: "T1", simulate: "read" }, "validate body")
+
+messages.estimate(agent_id: agent_id, recipient_count: 500, template_id: "T1", template_version: 2, traffic_type: "PROMOTION",
+                  fallback: { mode: "rcs_only" })
+path, options = client.calls.last
+check(path == "/message/estimate" && options[:method] == :post, "estimate path")
+check(options[:body] == { channel: "rcs", agentId: agent_id, recipientCount: 500, templateId: "T1", templateVersion: 2,
+                          trafficType: "PROMOTION", fallback: { mode: "rcs_only" } }, "estimate adds the channel")
+error = raises?(SignalHouseSms::ValidationError) { messages.estimate(agent_id: nil, recipient_count: 500) }
+check(error && error.message.include?("agentId"), "estimate requires agentId")
+
+messages.capabilities(agent_id: agent_id, phone_numbers: ["+15125550199"])
+path, options = client.calls.last
+check(path == "/rcs/capabilities" && options[:method] == :post, "capabilities path")
+check(options[:body] == { agentId: agent_id, phoneNumbers: ["+15125550199"] }, "capabilities body")
+error = raises?(SignalHouseSms::ValidationError) { messages.capabilities(agent_id: agent_id, phone_numbers: nil) }
+check(error && error.message.include?("phoneNumbers"), "capabilities requires phoneNumbers")
+
+messages.get(message_id: "a/1")
+path, options = client.calls.last
+check(path == "/message/a%2F1" && options[:method] == :get && options[:body].nil?, "get path")
+error = raises?(SignalHouseSms::ValidationError) { messages.get(message_id: nil) }
+check(error && error.message.include?("messageId"), "get requires messageId")
+
+all_messages = SignalHouseSms::Messages.new(client, multipart, false)
+all_messages.get_message(id: "a/1")
+path, options = client.calls.last
+check(path == "/message/a%2F1" && options[:method] == :get, "get_message path")
+error = raises?(SignalHouseSms::ValidationError) { all_messages.get_message(id: nil) }
+check(error && error.message.include?("id"), "get_message requires id")
+
+messages.list(agent_id: agent_id, from: "2026-11-01", to: "2026-11-02", group_id: "G1", status: "READ", page: 2, limit: 50,
+              template_id: "T1", template_version: 3, bulk_id: "B1", fallback_reason: "NOT_CAPABLE", billing_class: "RICH_MEDIA",
+              delivered_channel: "sms", is_test: false)
+path, options = client.calls.last
+check(path_of(path) == "/message" && options[:method] == :get, "list path")
+check(query_of(path) == { "registrationId" => agent_id, "startDate" => "2026-11-01", "endDate" => "2026-11-02", "groupId" => "G1",
+                          "status" => "READ", "page" => "2", "limit" => "50", "templateId" => "T1", "templateVersion" => "3",
+                          "bulkId" => "B1", "fallbackReason" => "NOT_CAPABLE", "billingClass" => "RICH_MEDIA",
+                          "deliveredChannel" => "sms", "isTest" => "false", "messageType" => "RCS" },
+      "list maps filters and adds the type")
+calls_before = client.calls.size
+error = raises?(SignalHouseSms::ValidationError) { messages.list(group_id: nil, from: "2026-11-01", to: "2026-11-02", agent_id: agent_id) }
+check(error && error.message.include?("groupId"), "list requires groupId")
+error = raises?(SignalHouseSms::ValidationError) { messages.list(group_id: "G1", from: nil, to: "2026-11-02") }
+check(error && error.message.include?("from"), "list requires from")
+error = raises?(SignalHouseSms::ValidationError) { messages.list(group_id: "G1", from: "2026-11-01", to: nil) }
+check(error && error.message.include?("to"), "list requires to")
+check(client.calls.size == calls_before, "list makes no request without its required fields")
+
+all_messages.get_messages(group_id: "G1", start_date: "2026-11-01", end_date: "2026-11-02", template_id: "T1", template_version: 3,
+                          bulk_id: "B1", fallback_reason: "TTL_EXPIRED", billing_class: "RICH", delivered_channel: "sms",
+                          is_test: false)
+path, options = client.calls.last
+check(path_of(path) == "/message" && options[:method] == :get, "get_messages path")
+check(query_of(path) == { "groupId" => "G1", "startDate" => "2026-11-01", "endDate" => "2026-11-02", "templateId" => "T1",
+                          "templateVersion" => "3", "bulkId" => "B1", "fallbackReason" => "TTL_EXPIRED", "billingClass" => "RICH",
+                          "deliveredChannel" => "sms", "isTest" => "false" },
+      "get_messages forwards the RCS filters")
+
+puts "RCS Ruby contracts passed (agents CRUD and lifecycle, multipart asset upload, registration drafts and filters, messages send/validate/estimate/capabilities/get/list, get_message, get_messages RCS filters)"
