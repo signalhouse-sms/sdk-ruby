@@ -454,13 +454,15 @@ NUMBERS  (signal_house.numbers)
 --------------------------------------------------------------------------------
   get_phone_numbers(phone_number: nil, campaign_id: nil,
       registration_id: nil, brand_id: nil, subgroup_id: nil, group_id: nil,
-      page: nil, limit: nil, current_toll_free_carrier: nil, token: nil,
-      headers: nil)
+      page: nil, limit: nil, current_toll_free_carrier: nil, released: nil,
+      token: nil, headers: nil)
     List your phone numbers with filters.
     registration_id: filter to numbers provisioned under this registration.
     current_toll_free_carrier: true, with group_id or subgroup_id, returns only
     toll-free numbers from the group's current toll-free carrier, the ones a new
     toll-free campaign in that group can use.
+    released: true, with subgroup_id or group_id, returns only its released
+    numbers (status RELEASED) instead of its active ones.
 
   get_number_health(phone_number:, token: nil, headers: nil)
     Get the health score, the same one the portal shows, (1–10) for an owned phone number.

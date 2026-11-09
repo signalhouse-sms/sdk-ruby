@@ -228,3 +228,14 @@ numbers.get_phone_numbers(group_id: "G1")
 check(client.calls.last[0] == "/number?groupId=G1", "phone numbers omit currentTollFreeCarrier by default")
 
 puts "Toll-free carrier filter Ruby contract passed"
+
+# The released filter on the number list.
+numbers.get_phone_numbers(group_id: "G1", released: true, token: "test-token")
+path, options = client.calls.last
+check(path == "/number?groupId=G1&released=true" && options[:method] == :get && options[:token] == "test-token", "phone numbers send released")
+numbers.get_phone_numbers(group_id: "G1", released: false)
+check(client.calls.last[0] == "/number?groupId=G1&released=false", "phone numbers send released false as lowercase")
+numbers.get_phone_numbers(group_id: "G1")
+check(client.calls.last[0] == "/number?groupId=G1", "phone numbers omit released by default")
+
+puts "Released numbers filter Ruby contract passed"

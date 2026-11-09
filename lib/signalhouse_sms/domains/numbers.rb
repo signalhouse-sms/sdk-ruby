@@ -30,11 +30,13 @@ module SignalHouseSms
     # registration_id filters to numbers provisioned under this registration.
     # current_toll_free_carrier: true, with group_id or subgroup_id, returns only toll-free numbers from the group's
     # current toll-free carrier, the ones a new toll-free campaign in that group can use.
-    def get_phone_numbers(phone_number: nil, campaign_id: nil, registration_id: nil, brand_id: nil, subgroup_id: nil, group_id: nil, page: nil, limit: nil, current_toll_free_carrier: nil, **opts)
+    # released: true, with subgroup_id or group_id, returns only its released numbers (status RELEASED) instead of
+    # its active ones.
+    def get_phone_numbers(phone_number: nil, campaign_id: nil, registration_id: nil, brand_id: nil, subgroup_id: nil, group_id: nil, page: nil, limit: nil, current_toll_free_carrier: nil, released: nil, **opts)
       token = opts[:token]
       headers = HttpClient.headers_for(opts)
       qs = @client.get_query_string(phoneNumber: phone_number, campaignId: campaign_id, registrationId: registration_id, brandId: brand_id, subgroupId: subgroup_id, groupId: group_id, page: page, limit: limit,
-                                    currentTollFreeCarrier: current_toll_free_carrier)
+                                    currentTollFreeCarrier: current_toll_free_carrier, released: released)
       @client.request("/number#{qs}", method: :get, token: token, headers: headers)
     end
 
