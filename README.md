@@ -252,7 +252,7 @@ client.users.admin.create_internal_user(
 |--------|----------|---------|
 | Auth | `client.auth` | `login`, `reset_password`, `get_auth_history`, `get_oauth_links`, `create_oauth_link`, `create_oauth_reauth`, `confirm_oauth_reauth`, `confirm_oauth_link`, `delete_oauth_link`, `get_oauth_authorization_url` |
 | Billing | `client.billing` | `get_transaction_history`, `get_wallet`, `update_wallet`, `get_payment_methods`, `add_funds`, `add_payment_method`, `remove_payment_method`, `get_invoice_details`, `get_fees` |
-| Brands | `client.brands` | `get_brands`, `get_external_vetting`, `create_brand`, `create_toll_free_brand`, `get_toll_free_requirements`, `transfer_brand`, `create_external_vetting`, `update_brand`, `revet_brand`, `delete_brand` |
+| Brands | `client.brands` | `get_brands`, `get_external_vetting`, `create_brand`, `create_toll_free_brand`, `get_toll_free_requirements`, `transfer_brand`, `create_external_vetting`, `update_brand`, `revet_brand`, `delete_brand`, `get_caller_name`, `set_caller_name`, `delete_caller_name` |
 | Campaigns | `client.campaigns` | `get_campaigns`, `create_campaign`, `update_campaign`, `delete_campaign` |
 | Campaigns Admin | `client.campaigns.admin` | `approve_campaign`, `reject_campaign` |
 | Groups | `client.groups` | `get_group`, `update_group`, `get_sso_configuration`, `save_sso_connection`, `delete_sso_connection`, `add_sso_domain`, `verify_sso_domain`, `remove_sso_domain` |

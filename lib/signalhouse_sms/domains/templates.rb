@@ -101,6 +101,8 @@ module SignalHouseSms
     # POST /template/:templateId/publish
     # Publish the current draft; no draft answers 409 NO_DRAFT, a draft that changed while it was being published
     # 409 DRAFT_CHANGED (publish again), and an incomplete draft 400 TEMPLATE_INVALID. Returns { head, version, warnings }.
+    # A block whose text or image the Moderation API flags is an error with code CONTENT_POLICY_FLAGGED, whose message
+    # names the category ("Content moderation flagged this text: spam"). The check passes when the Moderation API fails.
     def publish(template_id:, group_id:, **opts)
       @client.require_params("templateId" => template_id, "groupId" => group_id)
       safe_id = CGI.escape(template_id.to_s)
@@ -128,7 +130,8 @@ module SignalHouseSms
 
     # POST /template/:templateId/validate
     # Validate exactly one of body (a candidate body) or version (a stored version selector) without saving.
-    # Returns { valid, contentHash, validatorVersion, errors, warnings }.
+    # Returns { valid, contentHash, validatorVersion, errors, warnings }. The publish checks run, CONTENT_POLICY_FLAGGED
+    # included; saving a draft does not run that check.
     def validate(template_id:, group_id:, body: nil, version: nil, **opts)
       @client.require_params("templateId" => template_id, "groupId" => group_id)
       payload = validate_payload(group_id, body, version)

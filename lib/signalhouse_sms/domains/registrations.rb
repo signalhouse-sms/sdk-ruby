@@ -99,11 +99,13 @@ module SignalHouseSms
     # Allowed while the provider reports the agent ready for testing, after a Signal House rejection, or after every
     # carrier refused an earlier launch (409 otherwise); a failed requirement is a 400 whose details carry
     # { code: "REGISTRATION_INCOMPLETE", errors, warnings }. Returns the registration, now SIGNAL_HOUSE_REVIEW.
-    # An RCS agent's launch request charges its launch fees: a wallet that cannot cover them gets a 402, and nothing changes.
-    def launch_registration(registration_id:, **opts)
+    # An RCS agent's launch request charges its launch fees: a wallet that cannot cover them gets a 402, and nothing changes. When any fee is due the request must set acknowledge_fees: true, or it gets a 400 with code FEE_ACKNOWLEDGEMENT_REQUIRED and nothing is held; a launch with nothing due needs no acknowledgement.
+    # When the agent's brand vertical is healthcare or insurance, the launch needs the protected health information (PHI) disclosure acknowledged: send acknowledge_phi: true, or the request gets a 400 REGISTRATION_INCOMPLETE whose errors name consent.phiAcknowledgement. The API records the acknowledgement as consent.phiAcknowledgement { acknowledgedAt, acknowledgedBy } from the caller; the client sends only the boolean, and an agent update cannot set it. Once recorded, a later launch request needs no new acknowledgement.
+    def launch_registration(registration_id:, acknowledge_fees: nil, acknowledge_phi: nil, **opts)
       @client.require_params("registrationId" => registration_id)
       safe_id = CGI.escape(registration_id.to_s)
-      @client.request("/registration/#{safe_id}/launch", method: :post, token: opts[:token], headers: HttpClient.headers_for(opts))
+      body = { acknowledgeFees: acknowledge_fees, acknowledgePhi: acknowledge_phi }.compact
+      @client.request("/registration/#{safe_id}/launch", method: :post, body: body.empty? ? nil : body, token: opts[:token], headers: HttpClient.headers_for(opts))
     end
 
     # DELETE /registration/:registrationId
@@ -138,12 +140,16 @@ module SignalHouseSms
       end
 
       # POST /registration/:registrationId/review
-      # action is "APPROVE" (submits the registration to the provider) or "REJECT"; reason is required for REJECT.
-      def review_registration(registration_id:, action:, reason: nil, **opts)
+      # action is "APPROVE" (submits the registration to the provider) or "REJECT"; reason is required for REJECT. An RCS
+      # agent's rejection needs reason_code (a catalogue code) and a 10 to 256 character reason, and may list field-level
+      # rejection_reasons; any other type refuses both.
+      def review_registration(registration_id:, action:, reason: nil, reason_code: nil, rejection_reasons: nil, **opts)
         @client.require_params("registrationId" => registration_id, "action" => action)
         safe_id = CGI.escape(registration_id.to_s)
         body = { action: action }
         body[:reason] = reason unless reason.nil?
+        body[:reasonCode] = reason_code unless reason_code.nil?
+        body[:rejectionReasons] = rejection_reasons unless rejection_reasons.nil?
         @client.request("/registration/#{safe_id}/review", method: :post, body: body, token: opts[:token], headers: HttpClient.headers_for(opts))
       end
 

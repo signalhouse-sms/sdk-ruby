@@ -12,6 +12,8 @@ require "signalhouse_sms/http_client"
 require "signalhouse_sms/domains/messages"
 require "signalhouse_sms/domains/rcs"
 require "signalhouse_sms/domains/registrations"
+require "signalhouse_sms/domains/webhooks"
+require "signalhouse_sms/domains/billing"
 
 # Capture serialized requests without sending them; mirrors HttpClient's query and validation rules.
 class RcsSpyClient
@@ -86,14 +88,15 @@ agents.get(agent_id: agent_id)
 agents.update(agent_id: agent_id, campaign_id: nil, agent: { description: "Alerts" }, contact: { firstName: "Ada" })
 agents.validate(agent_id: agent_id)
 agents.submit(agent_id: agent_id)
-agents.launch(agent_id: agent_id)
+agents.launch(agent_id: agent_id, acknowledge_fees: true)
 agents.archive(agent_id: agent_id)
 agents.resend_tester_invite(agent_id: agent_id, phone_number: "+15125550199")
+agents.remove_tester(agent_id: agent_id, phone_number: "+15125550199")
 sent = client.calls.drop(calls_before)
 check(sent.map { |p, o| [o[:method], p] } == [
   [:get, "/rcs/agent/#{agent_id}"], [:put, "/rcs/agent/#{agent_id}"], [:post, "/rcs/agent/#{agent_id}/validate"],
   [:post, "/rcs/agent/#{agent_id}/submit"], [:post, "/registration/#{agent_id}/launch"], [:post, "/rcs/agent/#{agent_id}/archive"],
-  [:post, "/rcs/agent/#{agent_id}/testers/%2B15125550199/resend"]
+  [:post, "/rcs/agent/#{agent_id}/testers/%2B15125550199/resend"], [:delete, "/rcs/agent/#{agent_id}/testers/%2B15125550199"]
 ], "agent paths")
 check(sent[1][1][:body] == { agent: { description: "Alerts" }, contact: { firstName: "Ada" }, campaignId: nil }, "update sends only given fields, null unlinks")
 check(sent[0][1][:body].nil? && sent[5][1][:body].nil?, "get and archive send no body")
@@ -101,7 +104,12 @@ agents.get(agent_id: "A/1")
 check(client.calls.last[0] == "/rcs/agent/A%2F1", "get escapes id")
 error = raises?(SignalHouseSms::ValidationError) { agents.submit(agent_id: nil) }
 check(error && error.message.include?("agentId"), "submit requires agentId")
+check(sent[4][1][:body] == { acknowledgeFees: true }, "launch sends the acknowledgement")
 check(raises?(SignalHouseSms::ValidationError) { agents.launch(agent_id: nil) }, "launch requires agentId")
+
+SignalHouseSms::Billing.new(client, false).get_transaction_history(group_id: "G1", category: "RCS_INBOUND,RCS_CARRIER_PASSTHROUGH", limit: 1000)
+check(query_of(client.calls.last[0]) == { "groupId" => "G1", "category" => "RCS_INBOUND,RCS_CARRIER_PASSTHROUGH", "limit" => "1000" }, "history forwards the category")
+check(raises?(SignalHouseSms::ValidationError) { agents.remove_tester(agent_id: agent_id, phone_number: nil) }, "remove_tester requires phoneNumber")
 
 io = StringIO.new("\x89PNG".b)
 calls_before = client.calls.size
@@ -125,7 +133,7 @@ calls_before = client.calls.size
 registrations.update_registration(registration_id: agent_id, data: { useCase: "OTP" })
 registrations.validate_registration(registration_id: agent_id)
 registrations.submit_registration(registration_id: agent_id)
-registrations.launch_registration(registration_id: agent_id)
+registrations.launch_registration(registration_id: agent_id, acknowledge_fees: true, acknowledge_phi: true)
 registrations.get_registrations(type: "RCS_AGENT", brand_id: "BXYZ123", campaign_id: "CABC123")
 sent = client.calls.drop(calls_before)
 check(sent.first(4).map { |p, o| [o[:method], p] } == [
@@ -133,6 +141,7 @@ check(sent.first(4).map { |p, o| [o[:method], p] } == [
   [:post, "/registration/#{agent_id}/submit"], [:post, "/registration/#{agent_id}/launch"]
 ], "registration draft paths")
 check(sent[0][1][:body] == { useCase: "OTP" }, "update_registration sends data as the body")
+check(sent[3][1][:body] == { acknowledgeFees: true, acknowledgePhi: true }, "launch_registration sends both acknowledgements")
 check(query_of(sent[4][0]) == { "type" => "RCS_AGENT", "brandId" => "BXYZ123", "campaignId" => "CABC123" },
       "registrations link filters")
 error = raises?(SignalHouseSms::ValidationError) { registrations.update_registration(registration_id: agent_id, data: nil) }
@@ -181,6 +190,11 @@ check(path == "/rcs/capabilities" && options[:method] == :post, "capabilities pa
 check(options[:body] == { agentId: agent_id, phoneNumbers: ["+15125550199"] }, "capabilities body")
 error = raises?(SignalHouseSms::ValidationError) { messages.capabilities(agent_id: agent_id, phone_numbers: nil) }
 check(error && error.message.include?("phoneNumbers"), "capabilities requires phoneNumbers")
+messages.simulate_inbound(agent_id: agent_id, from: "+15125550199", type: "SUGGESTION", postback_data: "track_pkg")
+path, options = client.calls.last
+check(path == "/message/rcs/simulate-inbound" && options[:method] == :post, "simulate_inbound path")
+check(options[:body] == { agentId: agent_id, from: "+15125550199", type: "SUGGESTION", postbackData: "track_pkg" }, "simulate_inbound body")
+check(raises?(SignalHouseSms::ValidationError) { messages.simulate_inbound(agent_id: agent_id, from: nil, type: "TEXT") }, "simulate_inbound requires from")
 
 messages.get(message_id: "a/1")
 path, options = client.calls.last
@@ -194,6 +208,8 @@ path, options = client.calls.last
 check(path == "/message/a%2F1" && options[:method] == :get, "get_message path")
 error = raises?(SignalHouseSms::ValidationError) { all_messages.get_message(id: nil) }
 check(error && error.message.include?("id"), "get_message requires id")
+all_messages.get_message_interactions(id: "a/1")
+check(client.calls.last[0] == "/message/a%2F1/interactions" && client.calls.last[1][:method] == :get, "get_message_interactions path")
 
 messages.list(agent_id: agent_id, from: "2026-11-01", to: "2026-11-02", group_id: "G1", status: "READ", page: 2, limit: 50,
               template_id: "T1", template_version: 3, bulk_id: "B1", fallback_reason: "NOT_CAPABLE", billing_class: "RICH_MEDIA",
@@ -203,7 +219,7 @@ check(path_of(path) == "/message" && options[:method] == :get, "list path")
 check(query_of(path) == { "registrationId" => agent_id, "startDate" => "2026-11-01", "endDate" => "2026-11-02", "groupId" => "G1",
                           "status" => "READ", "page" => "2", "limit" => "50", "templateId" => "T1", "templateVersion" => "3",
                           "bulkId" => "B1", "fallbackReason" => "NOT_CAPABLE", "billingClass" => "RICH_MEDIA",
-                          "deliveredChannel" => "sms", "isTest" => "false", "messageType" => "RCS" },
+                          "deliveredChannel" => "sms", "isTest" => "false", "messageType" => "RCS", "dateBounds" => "exact" },
       "list maps filters and adds the type")
 calls_before = client.calls.size
 error = raises?(SignalHouseSms::ValidationError) { messages.list(group_id: nil, from: "2026-11-01", to: "2026-11-02", agent_id: agent_id) }
@@ -223,5 +239,28 @@ check(query_of(path) == { "groupId" => "G1", "startDate" => "2026-11-01", "endDa
                           "templateVersion" => "3", "bulkId" => "B1", "fallbackReason" => "TTL_EXPIRED", "billingClass" => "RICH",
                           "deliveredChannel" => "sms", "isTest" => "false" },
       "get_messages forwards the RCS filters")
+
+webhooks = SignalHouseSms::Webhooks.new(client, false)
+webhooks.get_webhooks(group_id: "G1", endpoint_type: "Agent", agent_id: agent_id)
+check(query_of(client.calls.last[0]) == { "groupId" => "G1", "endpointType" => "Agent", "agentId" => agent_id }, "get_webhooks filters by agent")
+webhook_data = { "groupId" => "G1", "endpointType" => "Agent", "agentId" => agent_id, "url" => "https://a.example/rcs", "secondaryUrl" => "https://b.example/rcs" }
+webhooks.create_webhook(webhook_data: webhook_data)
+check(client.calls.last[1][:body] == webhook_data, "create_webhook sends the agent fields")
+
+fixtures = File.expand_path("../../fixtures/rcs/requests.json", __dir__)
+if File.exist?(fixtures)
+  ruby_name = ->(name) { name.gsub(/[A-Z]/) { |letter| "_#{letter.downcase}" }.to_sym }
+  JSON.parse(File.read(fixtures))["cases"].each do |test_case|
+    domain, method = test_case["operation"].split(".")
+    target = domain == "agents" ? rcs.agents : rcs.messages
+    target.public_send(ruby_name.call(method), **test_case["input"].to_h { |key, value| [ruby_name.call(key), value] })
+    path, options = client.calls.last
+    request = test_case["request"]
+    check(options[:method] == request["method"].downcase.to_sym, "#{test_case["name"]}: method")
+    check(path_of(path) == request["path"], "#{test_case["name"]}: path")
+    check(query_of(path) == request.fetch("query", {}), "#{test_case["name"]}: query")
+    check(JSON.parse(JSON.generate(options[:body] || {})) == request.fetch("body", {}), "#{test_case["name"]}: body")
+  end
+end
 
 puts "RCS Ruby contracts passed (agents CRUD and lifecycle, multipart asset upload, registration drafts and filters, messages send/validate/estimate/capabilities/get/list, get_message, get_messages RCS filters)"

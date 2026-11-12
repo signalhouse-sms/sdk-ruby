@@ -23,8 +23,8 @@ module SignalHouseSms
     # launch text, every field required before the launch request, and blank consent fields fill from the linked
     # campaign; contact is { firstName, lastName, role, email, mobile }, the individual at the brand the carrier
     # partner's reviewers may write to, required in full before the launch request. use_case
-    # is OTP, TRANSACTIONAL, PROMOTIONAL or MULTI_USE (required before submit); billing_category defaults to
-    # NON_CONVERSATIONAL and submit refuses CONVERSATIONAL; default_fallback is { mode, channel, from }; excluded_carriers
+    # is OTP, TRANSACTIONAL, PROMOTIONAL or MULTI_USE (required before submit); billing_category is
+    # NON_CONVERSATIONAL (default, per message) or CONVERSATIONAL (per interactive session); default_fallback is { mode, channel, from }; excluded_carriers
     # is [] or ["T_MOBILE"] (the carrier partner's carrier name); testers holds up to 200 tester numbers. Returns 201
     # with the agent (status DRAFT).
     def create(brand_id:, campaign_id: UNSET, agent: nil, consent: nil, contact: nil, use_case: UNSET, billing_category: nil,
@@ -36,7 +36,7 @@ module SignalHouseSms
     end
 
     # GET /rcs/agent?...
-    # List agents, newest first. status is DRAFT, PENDING_REVIEW, REJECTED, AGENT_CREATING or ARCHIVED, one or a list
+    # List agents, newest first. status is DRAFT, PENDING_REVIEW, REJECTED, AGENT_CREATING, ARCHIVE_PENDING or ARCHIVED, one or a list
     # (String or Array, sent comma-separated). brand_id / campaign_id return the agents linked to that brand or
     # campaign. limit defaults to 25 (max 100). Response: { data: [agents], total, page, limit }.
     def list(group_id: nil, subgroup_id: nil, status: nil, brand_id: nil, campaign_id: nil, page: nil, limit: nil, **opts)
@@ -76,7 +76,7 @@ module SignalHouseSms
 
     # POST /rcs/agent/:agentId/submit
     # Submit a draft: create the agent at the carrier partner, with no review first. It needs the full profile, a use
-    # case and NON_CONVERSATIONAL billing; otherwise a 400 whose details carry { code: "REGISTRATION_INCOMPLETE",
+    # case and a billing category; otherwise a 400 whose details carry { code: "REGISTRATION_INCOMPLETE",
     # errors, warnings }. Returns the agent (status AGENT_CREATING, then IN_TESTING once the partner reports it ready).
     def submit(agent_id:, **opts)
       agent_request(agent_id, "/submit", :post, nil, opts)
@@ -87,15 +87,19 @@ module SignalHouseSms
     # PENDING_REVIEW), whose approval files the launch with the carrier partner. Allowed from IN_TESTING, REJECTED and
     # CARRIER_REJECTED (409 otherwise); a failed requirement is a 400 whose details carry
     # { code: "REGISTRATION_INCOMPLETE", errors, warnings }. Returns the agent (status PENDING_REVIEW).
-    # The request charges the agent's launch fees: a wallet that cannot cover them gets a 402, and the agent stays where it is. The agent's launchFees quotes what the next request charges.
-    def launch(agent_id:, **opts)
+    # The request charges the agent's launch fees: a wallet that cannot cover them gets a 402, and the agent stays where it is. When any fee is due the request must set acknowledge_fees: true, or it gets a 400 with code FEE_ACKNOWLEDGEMENT_REQUIRED and nothing is held; a launch with nothing due needs no acknowledgement. The agent's launchFees quotes what the next request charges.
+    # When the agent's brand vertical is healthcare or insurance, the launch needs the protected health information (PHI) disclosure acknowledged: send acknowledge_phi: true, or the request gets a 400 REGISTRATION_INCOMPLETE whose errors name consent.phiAcknowledgement. The API records the acknowledgement as consent.phiAcknowledgement { acknowledgedAt, acknowledgedBy } from the caller; the client sends only the boolean, and an agent update cannot set it. Once recorded, a later launch request needs no new acknowledgement.
+    def launch(agent_id:, acknowledge_fees: nil, acknowledge_phi: nil, **opts)
       @client.require_params("agentId" => agent_id)
       safe_id = CGI.escape(agent_id.to_s)
-      @client.request("/registration/#{safe_id}/launch", method: :post, token: opts[:token], headers: HttpClient.headers_for(opts))
+      body = { acknowledgeFees: acknowledge_fees, acknowledgePhi: acknowledge_phi }.compact
+      @client.request("/registration/#{safe_id}/launch", method: :post, body: body.empty? ? nil : body, token: opts[:token], headers: HttpClient.headers_for(opts))
     end
 
     # POST /rcs/agent/:agentId/archive
-    # Archive an agent. Returns the agent (status ARCHIVED).
+    # Archive an agent. Returns the agent (status ARCHIVE_PENDING or ARCHIVED). One the carrier partner created stops
+    # sending at once and stays ARCHIVE_PENDING until Signal House confirms the partner cancelled it, then ARCHIVED.
+    # Archiving cannot be undone; an agent already ARCHIVE_PENDING answers 409.
     def archive(agent_id:, **opts)
       agent_request(agent_id, "/archive", :post, nil, opts)
     end
@@ -107,6 +111,14 @@ module SignalHouseSms
     def resend_tester_invite(agent_id:, phone_number:, **opts)
       @client.require_params("phoneNumber" => phone_number)
       agent_request(agent_id, "/testers/#{CGI.escape(phone_number.to_s)}/resend", :post, nil, opts)
+    end
+
+    # DELETE /rcs/agent/:agentId/testers/:phoneNumber
+    # Remove a tester at once, at any point before the agent is archived. phone_number is a US number, with or without
+    # the +. The number must be a tester on the agent (404); an archived agent answers 409. Returns the agent.
+    def remove_tester(agent_id:, phone_number:, **opts)
+      @client.require_params("phoneNumber" => phone_number)
+      agent_request(agent_id, "/testers/#{CGI.escape(phone_number.to_s)}", :delete, nil, opts)
     end
 
     # POST /rcs/agent/:agentId/asset (multipart: kind, file)
@@ -171,6 +183,8 @@ module SignalHouseSms
     # campaign, and if content is omitted the template's fallback, else a generated one, is used. simulate is not_capable,
     # ttl_expired, delivered or read; is_test and simulate reach approved testers only. Returns 201 with
     # { requested, enqueued, failed, bulkId, messages }. A blocked row carries blockReason, reason and issues; an archived template answers 409 TEMPLATE_ARCHIVED.
+    # A recipient from 19999990000 to 19999990359 makes the whole request a simulation, as on SMS: it returns
+    # { simulated: true, webhooks } and nothing is stored, sent or charged.
     def send(agent_id:, recipients:, template_id: nil, template_version: nil, content: nil, content_format: nil, traffic_type: nil,
              ttl_seconds: nil, expire_time: nil, fallback: nil, status_callback_url: nil, enable_shortlink: nil, is_test: nil,
              simulate: nil, **opts)
@@ -200,7 +214,7 @@ module SignalHouseSms
     # carriers are unknown and the default fees apply. The other arguments are as on send, but the fallback's from is
     # optional for an estimate; with none, the fallback leg is priced on the channel of the agent's linked campaign.
     # Returns { billingClass, segments, recipientCount, rcsLeg, fallbackLeg, totals, balance, issues, warnings }.
-    # rcsLeg.mediaSurcharge is the carrier's surcharge on media over 5 MB, already inside rcsLeg.cost; a message over 100 MB adds a MEDIA_TOO_LARGE issue.
+    # rcsLeg.mediaSurcharge is the carrier's surcharge on media over 5 MB for one recipient, and rcsLeg.cost already holds it for every recipient; rcsLeg.cost is null with the fallback mode sms_only; a message over 100 MB adds a MEDIA_TOO_LARGE issue.
     def estimate(agent_id:, recipients: nil, recipient_count: nil, template_id: nil, template_version: nil, content: nil, content_format: nil,
                  traffic_type: nil, ttl_seconds: nil, expire_time: nil, fallback: nil, **opts)
       @client.require_params("agentId" => agent_id)
@@ -212,10 +226,20 @@ module SignalHouseSms
 
     # POST /rcs/capabilities
     # Report which numbers (up to 500, 10-15 digits, with or without the +) can receive RCS from an agent. Returns
-    # { results: [{ phoneNumber, capability }] }, capability being ENABLED, UNREACHABLE or UNKNOWN.
+    # { results: [{ phoneNumber, capability, rcsEnabled, reason, features, carrier, checkedAt, cached }] }, capability being ENABLED, UNREACHABLE or UNKNOWN, and reason CAPABLE, NOT_CAPABLE, NOT_LAUNCHED_ON_CARRIER or UNKNOWN; rcsEnabled is true only for CAPABLE, carrier and checkedAt may be null, and features is empty today.
     def capabilities(agent_id:, phone_numbers:, **opts)
       @client.require_params("agentId" => agent_id, "phoneNumbers" => phone_numbers)
       post("/rcs/capabilities", { agentId: agent_id, phoneNumbers: phone_numbers }, opts)
+    end
+
+    # POST /message/rcs/simulate-inbound
+    # Fake an inbound event from an approved tester of the agent, with no carrier involved: it runs the real inbound handlers and webhooks, as free test traffic. A simulated STOP really opts the tester out; a simulated START clears it. Anyone else gets a 403 with code NOT_TESTER. Returns 202 with { status, messageId }.
+    # type: TEXT, SUGGESTION, LOCATION, FILE or UNSUBSCRIBE. text is required for TEXT; SUGGESTION needs postback_data or button_id; LOCATION needs latitude
+    # and longitude. message_id is the message a tap answers, the latest message delivered to the tester by default.
+    def simulate_inbound(agent_id:, from:, type:, text: nil, postback_data: nil, message_id: nil, button_id: nil, latitude: nil, longitude: nil, file_name: nil, **opts)
+      @client.require_params("agentId" => agent_id, "from" => from, "type" => type)
+      post("/message/rcs/simulate-inbound", { agentId: agent_id, from: from, type: type, text: text, postbackData: postback_data, messageId: message_id,
+                                               buttonId: button_id, latitude: latitude, longitude: longitude, fileName: file_name }, opts)
     end
 
     # GET /message/:messageId
@@ -240,7 +264,7 @@ module SignalHouseSms
       qs = @client.get_query_string(
         registrationId: agent_id, startDate: from, endDate: to, groupId: group_id, status: status, page: page, limit: limit,
         templateId: template_id, templateVersion: template_version, bulkId: bulk_id, fallbackReason: fallback_reason,
-        billingClass: billing_class, deliveredChannel: delivered_channel, isTest: is_test, messageType: "RCS"
+        billingClass: billing_class, deliveredChannel: delivered_channel, isTest: is_test, messageType: "RCS", dateBounds: "exact"
       )
       @client.request("/message#{qs}", method: :get, token: opts[:token], headers: HttpClient.headers_for(opts))
     end

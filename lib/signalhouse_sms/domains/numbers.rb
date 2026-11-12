@@ -124,7 +124,8 @@ module SignalHouseSms
     # GET /number/:phoneNumber/cnam
     # Get a phone number's outbound caller name (CNAM) - the name US carriers show for calls from it.
     # Roles: api, admin, developer, billing, user.
-    # Returns { phoneNumber, cnam, autoApply, eligible, ineligibleReason }.
+    # Returns { phoneNumber, cnam, autoApply, eligible, ineligibleReason }; cnam.source is MANUAL (set on the
+    # number), BRAND (the brand's caller name) or AUTO (subgroup auto-apply).
     def get_caller_name(phone_number:, **opts)
       @client.require_params("phoneNumber" => phone_number)
       token = opts[:token]
@@ -151,8 +152,8 @@ module SignalHouseSms
     end
 
     # DELETE /number/:phoneNumber/cnam
-    # Remove a phone number's own caller name (CNAM). If its subgroup has caller name auto-apply on,
-    # the number goes back to the automatic name.
+    # Remove a phone number's own caller name (CNAM). The number goes back to its brand's caller name if
+    # the brand has one, else to the automatic name if its subgroup has caller name auto-apply on.
     # Roles: api, admin, developer.
     # Returns { phoneNumber, cnam, autoApply, eligible, ineligibleReason }.
     def delete_caller_name(phone_number:, **opts)

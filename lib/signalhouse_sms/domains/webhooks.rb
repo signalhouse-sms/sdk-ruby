@@ -9,10 +9,10 @@ module SignalHouseSms
     # GET /webhook?...
     # Each returned endpoint carries "hasSigningSecret" (bool) instead of the signing secret
     # itself — see create_webhook.
-    def get_webhooks(id: nil, group_id: nil, endpoint_type: nil, phone_number: nil, page: nil, limit: nil, **opts)
+    def get_webhooks(id: nil, group_id: nil, endpoint_type: nil, phone_number: nil, agent_id: nil, page: nil, limit: nil, **opts)
       token = opts[:token]
       headers = HttpClient.headers_for(opts)
-      qs = @client.get_query_string(id: id, groupId: group_id, endpointType: endpoint_type, phoneNumber: phone_number, page: page, limit: limit)
+      qs = @client.get_query_string(id: id, groupId: group_id, endpointType: endpoint_type, phoneNumber: phone_number, agentId: agent_id, page: page, limit: limit)
       @client.request("/webhook#{qs}", method: :get, token: token, headers: headers)
     end
 
@@ -29,6 +29,10 @@ module SignalHouseSms
     # and "CAMPAIGN_HEALTH_BELOW_THRESHOLD" each take { "threshold" => n }, the 7-day health score (1.5–10, in
     # 0.5 steps) below which the event fires. A subscribed health event without a threshold is stored with
     # the default, 6.
+    #
+    # webhook_data "endpointType" is "Global", "Number" or "Agent". An "Agent" endpoint receives one RCS agent's
+    # events only: it needs "agentId", and may set "secondaryUrl", which gets one try when every attempt to
+    # "url" fails.
     def create_webhook(webhook_data:, **opts)
       @client.require_params("webhookData" => webhook_data)
       token = opts[:token]
@@ -46,6 +50,8 @@ module SignalHouseSms
     # update_data "eventSettings" changes per-event options by event name ("NUMBER_HEALTH_BELOW_THRESHOLD",
     # "CAMPAIGN_HEALTH_BELOW_THRESHOLD", each { "threshold" => n }, 1.5–10 in 0.5 steps); events you omit
     # keep their stored settings.
+    #
+    # update_data "secondaryUrl" changes an "Agent" endpoint's secondary URL, and nil clears it.
     def update_webhook(id:, update_data:, **opts)
       @client.require_params("id" => id, "updateData" => update_data)
       token = opts[:token]

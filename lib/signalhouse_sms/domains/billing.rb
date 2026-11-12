@@ -13,10 +13,11 @@ module SignalHouseSms
     end
 
     # GET /billing/wallet/transactionHistory?...
-    def get_transaction_history(group_id: nil, subgroup_id: nil, brand_id: nil, campaign_id: nil, entry_type: nil, transaction_type: nil, start_date: nil, end_date: nil, **opts)
+    # category: One category, or a comma-separated list: one of the RCS categories RCS_RICH_OUTBOUND, RCS_RICH_MEDIA_OUTBOUND, RCS_INBOUND, RCS_ACTION_CLICK, RCS_MEDIA_SURCHARGE, RCS_FEE_ONBOARDING, RCS_FEE_RENEWAL, RCS_SESSION_ADJUSTMENT or RCS_SESSION_CARRIER_ADJUSTMENT, or RCS_CARRIER_PASSTHROUGH for RCS carrier rows alone. Any other value is rejected with a 400.
+    def get_transaction_history(group_id: nil, subgroup_id: nil, brand_id: nil, campaign_id: nil, entry_type: nil, transaction_type: nil, start_date: nil, end_date: nil, category: nil, page: nil, limit: nil, **opts)
       token = opts[:token]
       headers = HttpClient.headers_for(opts)
-      qs = @client.get_query_string(groupId: group_id, subgroupId: subgroup_id, brandId: brand_id, campaignId: campaign_id, entryType: entry_type, transactionType: transaction_type, startDate: start_date, endDate: end_date)
+      qs = @client.get_query_string(groupId: group_id, subgroupId: subgroup_id, brandId: brand_id, campaignId: campaign_id, entryType: entry_type, transactionType: transaction_type, startDate: start_date, endDate: end_date, category: category, page: page, limit: limit)
       @client.request("/billing/wallet/transactionHistory#{qs}", method: :get, token: token, headers: headers)
     end
 

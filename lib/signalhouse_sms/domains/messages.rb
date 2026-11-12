@@ -363,13 +363,24 @@ module SignalHouseSms
     end
 
     # GET /message/:id
-    # One message of any type by its ID; an unknown ID is a 404.
+    # One message of any type by its ID; an unknown ID is a 404. An outbound RCS message and its fallback leg also carry
+    # costBreakdown, { legs: [{ messageId, channel, billed, billingClass, segments, baseMicros, carrierMicros, rated }] }, which is nil when it cannot be computed.
     def get_message(id:, **opts)
       @client.require_params("id" => id)
       token = opts[:token]
       headers = HttpClient.headers_for(opts)
       safe_id = CGI.escape(id.to_s)
       @client.request("/message/#{safe_id}", method: :get, token: token, headers: headers)
+    end
+
+    # GET /message/:id/interactions
+    # The taps on one RCS message, oldest first; an unknown ID is a 404.
+    def get_message_interactions(id:, **opts)
+      @client.require_params("id" => id)
+      token = opts[:token]
+      headers = HttpClient.headers_for(opts)
+      safe_id = CGI.escape(id.to_s)
+      @client.request("/message/#{safe_id}/interactions", method: :get, token: token, headers: headers)
     end
 
     # GET /message/p2p/batches/:batchId

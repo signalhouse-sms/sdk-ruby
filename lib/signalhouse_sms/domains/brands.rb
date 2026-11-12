@@ -12,6 +12,7 @@ module SignalHouseSms
     # GET /brand?... — brandId may be null until carrier assignment; poll by record _id.
     # registration_type optionally filters by "TEN_DLC", "TOLL_FREE", or "SHORT_CODE".
     # Each brand carries `carrierSuspensions` (carrier brand suspension rules; active while liftedAt is null).
+    # Each brand also carries `cnamName` (its caller name for numbers, or null; see get_caller_name).
     # current_toll_free_carrier: true, with group_id or subgroup_id, returns only toll-free brands on the group's
     # current toll-free carrier, the ones a new toll-free campaign in that group can use.
     # Each toll-free brand carries tollFree.reviewsBusinessOnSubmit: whether it's reviewed when it's submitted and keeps
@@ -194,6 +195,48 @@ module SignalHouseSms
       form_data["explanation"] = explanation.to_s
 
       @multipart_client.request("/brand/appeal/#{safe_brand_id}", method: :post, body: form_data, token: token, headers: headers)
+    end
+
+    # GET /brand/cnam/:brandId
+    # Get a brand's caller name (CNAM) and the numbers it applies to: every number whose caller name comes
+    # from this brand (its campaign numbers, numbers it was picked on, and campaign-less numbers of
+    # subgroups that use it as their default caller-ID brand).
+    # Roles: api, admin, developer, billing, user.
+    # Returns { brandId, companyName, cnamName, eligible, numbers: { total, items } }; items lists the first 100.
+    def get_caller_name(brand_id:, **opts)
+      @client.require_params("brandId" => brand_id)
+      token = opts[:token]
+      headers = HttpClient.headers_for(opts)
+      safe_brand_id = CGI.escape(brand_id.to_s)
+      @client.request("/brand/cnam/#{safe_brand_id}", method: :get, token: token, headers: headers)
+    end
+
+    # PUT /brand/cnam/:brandId
+    # Set a brand's caller name (CNAM). It replaces the caller name on every number whose caller name comes
+    # from this brand, names set on a number included, and numbers that later come under the brand get it
+    # too. The name may only remove characters from the brand's registered name and must be 1-15 letters,
+    # digits, spaces, - or _; the brand must be verified. Numbers are updated at the carrier in the background.
+    # Roles: api, admin, developer.
+    # Returns { brandId, companyName, cnamName, eligible, numbers: { total, items } }.
+    def set_caller_name(brand_id:, name:, **opts)
+      @client.require_params("brandId" => brand_id, "name" => name)
+      token = opts[:token]
+      headers = HttpClient.headers_for(opts)
+      safe_brand_id = CGI.escape(brand_id.to_s)
+      @client.request("/brand/cnam/#{safe_brand_id}", method: :put, body: { name: name }, token: token, headers: headers)
+    end
+
+    # DELETE /brand/cnam/:brandId
+    # Remove a brand's caller name (CNAM). Numbers that had it go back to the automatic name if their
+    # subgroup has caller name auto-apply on, otherwise to no caller name. Names set on a number are kept.
+    # Roles: api, admin, developer.
+    # Returns { brandId, companyName, cnamName, eligible, numbers: { total, items } }.
+    def delete_caller_name(brand_id:, **opts)
+      @client.require_params("brandId" => brand_id)
+      token = opts[:token]
+      headers = HttpClient.headers_for(opts)
+      safe_brand_id = CGI.escape(brand_id.to_s)
+      @client.request("/brand/cnam/#{safe_brand_id}", method: :delete, token: token, headers: headers)
     end
   end
 end
