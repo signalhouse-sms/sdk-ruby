@@ -27,11 +27,13 @@ module SignalHouseSms
     # NON_CONVERSATIONAL (default, per message) or CONVERSATIONAL (per interactive session); default_fallback is { mode, channel, from }; excluded_carriers
     # is [] or ["T_MOBILE"] (the carrier partner's carrier name); testers holds up to 200 tester numbers. Returns 201
     # with the agent (status DRAFT).
+    # autofill says where the fields you prefilled came from, by path ("consent.optInDetails" => { source (brand,
+    # campaign or landing), sourceId, at, edited }); the API adds its own for the fields it fills.
     def create(brand_id:, campaign_id: UNSET, agent: nil, consent: nil, contact: nil, use_case: UNSET, billing_category: nil,
-               default_fallback: UNSET, excluded_carriers: nil, testers: nil, **opts)
+               default_fallback: UNSET, excluded_carriers: nil, testers: nil, autofill: nil, **opts)
       @client.require_params("brandId" => brand_id)
       payload = agent_payload(brand_id, campaign_id, agent, consent, use_case, billing_category, default_fallback,
-                              excluded_carriers, testers, contact)
+                              excluded_carriers, testers, contact, autofill)
       @client.request("/rcs/agent", method: :post, body: payload, token: opts[:token], headers: HttpClient.headers_for(opts))
     end
 
@@ -48,7 +50,8 @@ module SignalHouseSms
     end
 
     # GET /rcs/agent/:agentId
-    # One agent with the live state of its brand and campaign links.
+    # One agent with the live state of its brand and campaign links. googleAgentId is Google's id for the agent, nil until
+    # Google has created it.
     def get(agent_id:, **opts)
       agent_request(agent_id, "", :get, nil, opts)
     end
@@ -59,17 +62,21 @@ module SignalHouseSms
     # contact merge field by field and every other key replaces. brand_id relinks to another brand of the same
     # subgroup (locked once the agent exists at the partner); campaign_id: nil unlinks the campaign; use_case: nil and
     # default_fallback: nil clear those fields; billing_category is locked once a launch was requested. 409 in any
-    # other status. Returns the agent.
+    # other status. After a carrier rejected a launch other carriers took (PARTIALLY_LAUNCHED with a REJECTED carrier),
+    # only consent and contact may change, and nothing is pushed: send them with request_carrier_update. autofill
+    # replaces the prefill markers; omitted, the stored ones are kept and a changed field's marker turns edited.
+    # Returns the agent.
     def update(agent_id:, brand_id: nil, campaign_id: UNSET, agent: nil, consent: nil, contact: nil, use_case: UNSET,
-               billing_category: nil, default_fallback: UNSET, excluded_carriers: nil, testers: nil, **opts)
+               billing_category: nil, default_fallback: UNSET, excluded_carriers: nil, testers: nil, autofill: nil, **opts)
       payload = agent_payload(brand_id, campaign_id, agent, consent, use_case, billing_category, default_fallback,
-                              excluded_carriers, testers, contact)
+                              excluded_carriers, testers, contact, autofill)
       agent_request(agent_id, "", :put, payload, opts)
     end
 
     # POST /rcs/agent/:agentId/validate
     # Check an agent against every submit requirement without writing.
-    # Returns { valid, errors: [{ field, reason }], warnings: [{ field, reason }] }.
+    # Returns { valid, errors: [{ field, reason, code? }], warnings: [{ field, reason }] }; a copy-rule error at the
+    # launch gate carries the carrier partner's key as code (for example OPT_IN_MSG_RATE_DISCL_MISSING).
     def validate(agent_id:, **opts)
       agent_request(agent_id, "/validate", :post, nil, opts)
     end
@@ -78,6 +85,8 @@ module SignalHouseSms
     # Submit a draft: create the agent at the carrier partner, with no review first. It needs the full profile, a use
     # case and a billing category; otherwise a 400 whose details carry { code: "REGISTRATION_INCOMPLETE",
     # errors, warnings }. Returns the agent (status AGENT_CREATING, then IN_TESTING once the partner reports it ready).
+    # A group that has not finished account verification gets a 403 with code GROUP_UNVERIFIED, and a rejected one a
+    # 403 with code GROUP_REJECTED; a pending verification passes.
     def submit(agent_id:, **opts)
       agent_request(agent_id, "/submit", :post, nil, opts)
     end
@@ -86,7 +95,9 @@ module SignalHouseSms
     # Request the agent's launch: the launch requirements are checked and the agent goes to Signal House review (status
     # PENDING_REVIEW), whose approval files the launch with the carrier partner. Allowed from IN_TESTING, REJECTED and
     # CARRIER_REJECTED (409 otherwise); a failed requirement is a 400 whose details carry
-    # { code: "REGISTRATION_INCOMPLETE", errors, warnings }. Returns the agent (status PENDING_REVIEW).
+    # { code: "REGISTRATION_INCOMPLETE", errors, warnings }, and a copy-rule error carries the carrier partner's key as
+    # its code (for example OPT_IN_MSG_RATE_DISCL_MISSING). A group that has not finished account verification gets a 403
+    # with code GROUP_UNVERIFIED, and a rejected one a 403 with code GROUP_REJECTED. Returns the agent (status PENDING_REVIEW).
     # The request charges the agent's launch fees: a wallet that cannot cover them gets a 402, and the agent stays where it is. When any fee is due the request must set acknowledge_fees: true, or it gets a 400 with code FEE_ACKNOWLEDGEMENT_REQUIRED and nothing is held; a launch with nothing due needs no acknowledgement. The agent's launchFees quotes what the next request charges.
     # When the agent's brand vertical is healthcare or insurance, the launch needs the protected health information (PHI) disclosure acknowledged: send acknowledge_phi: true, or the request gets a 400 REGISTRATION_INCOMPLETE whose errors name consent.phiAcknowledgement. The API records the acknowledgement as consent.phiAcknowledgement { acknowledgedAt, acknowledgedBy } from the caller; the client sends only the boolean, and an agent update cannot set it. Once recorded, a later launch request needs no new acknowledgement.
     def launch(agent_id:, acknowledge_fees: nil, acknowledge_phi: nil, **opts)
@@ -96,12 +107,35 @@ module SignalHouseSms
       @client.request("/registration/#{safe_id}/launch", method: :post, body: body.empty? ? nil : body, token: opts[:token], headers: HttpClient.headers_for(opts))
     end
 
+    # POST /registration/:agentId/carrier-update (the agent is a registration)
+    # Send Signal House the corrected launch answers after a carrier rejected a launch other carriers took. The carrier
+    # partner takes no change through its API once a carrier launched, so Signal House emails it the update; edit
+    # consent and contact first. The agent's carrierUpdate reads REQUESTED for the rejected carriers, then SENT once
+    # Signal House sent it. 409 when no carrier is REJECTED after a partial launch, or an update already waits.
+    # Returns the agent's registration, with data.carrierUpdate.
+    def request_carrier_update(agent_id:, **opts)
+      @client.require_params("agentId" => agent_id)
+      safe_id = CGI.escape(agent_id.to_s)
+      @client.request("/registration/#{safe_id}/carrier-update", method: :post, token: opts[:token], headers: HttpClient.headers_for(opts))
+    end
+
     # POST /rcs/agent/:agentId/archive
     # Archive an agent. Returns the agent (status ARCHIVE_PENDING or ARCHIVED). One the carrier partner created stops
     # sending at once and stays ARCHIVE_PENDING until Signal House confirms the partner cancelled it, then ARCHIVED.
     # Archiving cannot be undone; an agent already ARCHIVE_PENDING answers 409.
     def archive(agent_id:, **opts)
       agent_request(agent_id, "/archive", :post, nil, opts)
+    end
+
+    # POST /rcs/agent/:agentId/entry-points
+    # Make the links that start a chat with the agent: an sms: deep link in Google's format, and a short link that
+    # redirects to it, to print as a QR code. With the agent's defaultFallback.from, the deep link names that number, so a
+    # handset that cannot reach the agent texts it instead. body (max 1,000 characters) is the message the chat opens
+    # with, prefilled on the handset. The same request returns the same short link. The links work for approved testers
+    # until a carrier launches the agent; before Google has created the agent the request answers 409 with code
+    # GOOGLE_AGENT_PENDING. Returns { googleAgentId, deepLink, shortLink }.
+    def create_entry_points(agent_id:, body: nil, **opts)
+      agent_request(agent_id, "/entry-points", :post, body.nil? ? nil : { body: body }, opts)
     end
 
     # POST /rcs/agent/:agentId/testers/:phoneNumber/resend
@@ -145,9 +179,9 @@ module SignalHouseSms
     # Agent create/update body: nil omits a field, except campaign_id, use_case and default_fallback, where UNSET omits
     # it and nil sends null.
     def agent_payload(brand_id, campaign_id, agent, consent, use_case, billing_category, default_fallback,
-                      excluded_carriers, testers, contact = nil)
+                      excluded_carriers, testers, contact = nil, autofill = nil)
       payload = { brandId: brand_id, agent: agent, consent: consent, contact: contact, billingCategory: billing_category,
-                  excludedCarriers: excluded_carriers, testers: testers }.compact
+                  excludedCarriers: excluded_carriers, testers: testers, autofill: autofill }.compact
       { campaignId: campaign_id, useCase: use_case, defaultFallback: default_fallback }.each do |key, value|
         payload[key] = value unless value.equal?(UNSET)
       end
@@ -193,6 +227,26 @@ module SignalHouseSms
                              content: content, contentFormat: content_format, trafficType: traffic_type, ttlSeconds: ttl_seconds,
                              expireTime: expire_time, fallback: fallback, statusCallbackUrl: status_callback_url,
                              enableShortlink: enable_shortlink, isTest: is_test, simulate: simulate }, opts)
+    end
+
+    # POST /message/rcs/batch
+    # Send to up to 10,000 recipients in the background. Takes the same arguments as send. The request runs the send's
+    # request checks, splits the recipients into chunks of 100, queues each chunk and answers 202. Every message carries
+    # the shared bulkId; track progress with the messages list filtered by bulkId (GET /message?bulkId=) and per-message
+    # webhooks. A chunk the wallet cannot cover, or that is refused after acceptance, gets BLOCKED messages with
+    # blockReason INSUFFICIENT_FUNDS or SEND_REFUSED; a chunk that keeps failing gets SEND_FAILED. template_version is
+    # pinned when the batch is accepted; ttl_seconds counts from when each chunk is sent. Pass idempotency_key: to make a
+    # retry safe (same bulkId, no duplicate sends); a retry without one may send duplicates. Returns 202 with
+    # { bulkId, status: "ACCEPTED", recipientCount }. A recipient from 19999990000 to 19999990359 makes the whole request
+    # a simulation, as on send.
+    def send_batch(agent_id:, recipients:, template_id: nil, template_version: nil, content: nil, content_format: nil, traffic_type: nil,
+                   ttl_seconds: nil, expire_time: nil, fallback: nil, status_callback_url: nil, enable_shortlink: nil, is_test: nil,
+                   simulate: nil, **opts)
+      @client.require_params("agentId" => agent_id, "recipients" => recipients)
+      post("/message/rcs/batch", { agentId: agent_id, recipients: recipients, templateId: template_id, templateVersion: template_version,
+                                   content: content, contentFormat: content_format, trafficType: traffic_type, ttlSeconds: ttl_seconds,
+                                   expireTime: expire_time, fallback: fallback, statusCallbackUrl: status_callback_url,
+                                   enableShortlink: enable_shortlink, isTest: is_test, simulate: simulate }, opts)
     end
 
     # POST /message/rcs/validate
@@ -243,7 +297,8 @@ module SignalHouseSms
     end
 
     # GET /message/:messageId
-    # One message by its ID; an unknown ID is a 404. The same route as messages.get_message.
+    # One message by its ID; an unknown ID is a 404. The same route as messages.get_message. A settled RCS message carries
+    # carrierFeeMicros, the carrier pass-through and media surcharge it was charged.
     def get(message_id:, **opts)
       @client.require_params("messageId" => message_id)
       safe_id = CGI.escape(message_id.to_s)

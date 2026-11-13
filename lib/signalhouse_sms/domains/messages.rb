@@ -311,6 +311,28 @@ module SignalHouseSms
       @client.request("/message/dnc#{qs}", method: :get, token: token, headers: headers)
     end
 
+    # GET /message/dnc/consent-records?...
+    # Exports the group's consent ledger, newest first: one append-only record per opt-out or opt-in instruction a
+    # recipient gave (a STOP or START keyword, or the confirmation of an opt-out link). The ledger records only; sends
+    # do not read it. group_id is required. recipient_phone_number filters to one handset, in any spelling, matched on
+    # its digits. start_date and end_date filter occurredAt: a bare date is its whole UTC day, a timestamp is bound as
+    # sent. page defaults to 1; limit defaults to 100, max 500.
+    # The response is { data, total, page, limit }. Each record carries groupId, subgroupId, recipientPhoneNumber (the
+    # handset, digits), phoneNumber (the business number, or the RCS agent id, that received the instruction), scope
+    # { type, id } (CAMPAIGN, AGENT or SUBGROUP, with that campaign, agent or subgroup id), clearedScopes (for OPT_IN,
+    # every { type, id } the START cleared; empty for OPT_OUT), action (OPT_OUT or OPT_IN),
+    # source (KEYWORD or LINK), keyword ("LINK" for a link), messageType (SMS, MMS or RCS), messageId (the inbound
+    # message id; for a link, the opt-out link's id), actor { type: "RECIPIENT" }, occurredAt and createdAt.
+    def get_consent_records(group_id: nil, recipient_phone_number: nil, start_date: nil, end_date: nil, page: nil, limit: nil, **opts)
+      token = opts[:token]
+      headers = HttpClient.headers_for(opts)
+      qs = @client.get_query_string(
+        groupId: group_id, recipientPhoneNumber: recipient_phone_number,
+        startDate: start_date, endDate: end_date, page: page, limit: limit
+      )
+      @client.request("/message/dnc/consent-records#{qs}", method: :get, token: token, headers: headers)
+    end
+
     # POST /message/sms
     # The response reports the send outcome via requestedRecipientCount, enqueuedCount, and failedCount.
     # enqueuedCount is the number of recipients accepted for delivery and is 0 when the send was fully
@@ -365,6 +387,7 @@ module SignalHouseSms
     # GET /message/:id
     # One message of any type by its ID; an unknown ID is a 404. An outbound RCS message and its fallback leg also carry
     # costBreakdown, { legs: [{ messageId, channel, billed, billingClass, segments, baseMicros, carrierMicros, rated }] }, which is nil when it cannot be computed.
+    # A settled RCS message also carries carrierFeeMicros: the carrier pass-through and media surcharge it was charged.
     def get_message(id:, **opts)
       @client.require_params("id" => id)
       token = opts[:token]

@@ -72,6 +72,12 @@ end
 
 messages.get_analytics_filter_options(group_id: "G1", region: "GB")
 check(client.calls.last[0] == "/message/analytics/filter-options?groupId=G1&region=GB", "filter options region")
+messages.get_consent_records(group_id: "G1", recipient_phone_number: "15555550100", start_date: "2026-12-01", end_date: "2026-12-31", page: 2, limit: 50, token: "test-token")
+path, options = client.calls.last
+check(path == "/message/dnc/consent-records?groupId=G1&recipientPhoneNumber=15555550100&startDate=2026-12-01&endDate=2026-12-31&page=2&limit=50", "consent records query")
+check(options[:method] == :get && options[:token] == "test-token", "consent records method and token")
+messages.get_consent_records(group_id: "G1")
+check(client.calls.last[0] == "/message/dnc/consent-records?groupId=G1", "consent records default query")
 
 {
   get_analytics: "/message/analytics", get_analytics_detail: "/message/analytics/detail",

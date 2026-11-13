@@ -24,6 +24,7 @@ require_relative "signalhouse_sms/domains/subscriptions"
 require_relative "signalhouse_sms/domains/templates"
 require_relative "signalhouse_sms/domains/tickets"
 require_relative "signalhouse_sms/domains/users"
+require_relative "signalhouse_sms/domains/verify"
 require_relative "signalhouse_sms/domains/voice"
 require_relative "signalhouse_sms/domains/webhooks"
 

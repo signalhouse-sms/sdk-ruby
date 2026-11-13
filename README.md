@@ -270,6 +270,7 @@ client.users.admin.create_internal_user(
 | RCS Messages | `client.rcs.messages` | `send`, `validate`, `estimate`, `capabilities`, `get`, `list` |
 | Users | `client.users` | `get_users`, `create_user`, `create_service_user`, `update_user`, `delete_user`, `get_notification_preferences`, `update_notification_preferences` |
 | Users Admin | `client.users.admin` | `get_users`, `create_internal_user` |
+| Verify | `client.verify` | `check_sim_swap`, `start_number_verification`, `get_number_verification` (phone on mobile data for Number Verify; each answered check is billed) |
 | Webhooks | `client.webhooks` | `get_webhooks`, `create_webhook`, `update_webhook`, `delete_webhook` |
 
 ## Error Handling

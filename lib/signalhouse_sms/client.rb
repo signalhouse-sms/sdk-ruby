@@ -6,7 +6,7 @@ module SignalHouseSms
   class Client
     attr_reader :agents, :auth, :billing, :brands, :campaigns, :groups, :landings,
                 :messages, :notifications, :numbers, :registrations, :onboarding, :rcs,
-                :shortlinks, :subgroups, :subscriptions, :templates, :tickets, :users, :voice, :webhooks
+                :shortlinks, :subgroups, :subscriptions, :templates, :tickets, :users, :verify, :voice, :webhooks
 
     # Initialize a new SignalHouse client.
     #
@@ -39,6 +39,7 @@ module SignalHouseSms
       @templates      = Templates.new(json_client, multipart_client, enable_admin)
       @tickets        = Tickets.new(json_client, enable_admin)
       @users          = Users.new(json_client, enable_admin)
+      @verify         = Verify.new(json_client, enable_admin)
       @voice          = Voice.new(json_client, enable_admin)
       @webhooks       = Webhooks.new(json_client, enable_admin)
     end

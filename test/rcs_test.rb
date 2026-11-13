@@ -106,6 +106,16 @@ error = raises?(SignalHouseSms::ValidationError) { agents.submit(agent_id: nil) 
 check(error && error.message.include?("agentId"), "submit requires agentId")
 check(sent[4][1][:body] == { acknowledgeFees: true }, "launch sends the acknowledgement")
 check(raises?(SignalHouseSms::ValidationError) { agents.launch(agent_id: nil) }, "launch requires agentId")
+agents.create_entry_points(agent_id: agent_id, body: "Hi there")
+path, options = client.calls.last
+check(path == "/rcs/agent/#{agent_id}/entry-points" && options[:method] == :post, "create_entry_points path")
+check(options[:body] == { body: "Hi there" }, "create_entry_points sends the opening message")
+agents.create_entry_points(agent_id: "A/1")
+check(client.calls.last[0] == "/rcs/agent/A%2F1/entry-points" && client.calls.last[1][:body].nil?, "create_entry_points escapes the id and sends no body without one")
+check(raises?(SignalHouseSms::ValidationError) { agents.create_entry_points(agent_id: nil) }, "create_entry_points requires agentId")
+agents.request_carrier_update(agent_id: agent_id)
+check(client.calls.last[0] == "/registration/#{agent_id}/carrier-update" && client.calls.last[1][:method] == :post && client.calls.last[1][:body].nil?, "request_carrier_update posts with no body")
+check(raises?(SignalHouseSms::ValidationError) { agents.request_carrier_update(agent_id: nil) }, "request_carrier_update requires agentId")
 
 SignalHouseSms::Billing.new(client, false).get_transaction_history(group_id: "G1", category: "RCS_INBOUND,RCS_CARRIER_PASSTHROUGH", limit: 1000)
 check(query_of(client.calls.last[0]) == { "groupId" => "G1", "category" => "RCS_INBOUND,RCS_CARRIER_PASSTHROUGH", "limit" => "1000" }, "history forwards the category")
@@ -169,6 +179,18 @@ error = raises?(SignalHouseSms::ValidationError) { messages.send(agent_id: nil, 
 check(error && error.message.include?("agentId"), "send requires agentId")
 error = raises?(SignalHouseSms::ValidationError) { messages.send(agent_id: agent_id, recipients: nil) }
 check(error && error.message.include?("recipients"), "send requires recipients")
+
+messages.send_batch(agent_id: agent_id, recipients: recipients, template_id: "T1", template_version: 2, enable_shortlink: false,
+                    idempotency_key: "k1")
+path, options = client.calls.last
+check(path == "/message/rcs/batch" && options[:method] == :post, "send_batch path")
+check(options[:headers] == { "Idempotency-Key" => "k1" }, "send_batch idempotency")
+check(options[:body] == { agentId: agent_id, recipients: recipients, templateId: "T1", templateVersion: 2, enableShortlink: false },
+      "send_batch sends the send body")
+error = raises?(SignalHouseSms::ValidationError) { messages.send_batch(agent_id: nil, recipients: recipients) }
+check(error && error.message.include?("agentId"), "send_batch requires agentId")
+error = raises?(SignalHouseSms::ValidationError) { messages.send_batch(agent_id: agent_id, recipients: nil) }
+check(error && error.message.include?("recipients"), "send_batch requires recipients")
 
 messages.validate(agent_id: agent_id, recipients: recipients, template_id: "T1", simulate: "read")
 path, options = client.calls.last
@@ -263,4 +285,4 @@ if File.exist?(fixtures)
   end
 end
 
-puts "RCS Ruby contracts passed (agents CRUD and lifecycle, multipart asset upload, registration drafts and filters, messages send/validate/estimate/capabilities/get/list, get_message, get_messages RCS filters)"
+puts "RCS Ruby contracts passed (agents CRUD and lifecycle, entry points, multipart asset upload, registration drafts and filters, messages send/send_batch/validate/estimate/capabilities/get/list, get_message, get_messages RCS filters)"
