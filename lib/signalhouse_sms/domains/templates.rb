@@ -103,6 +103,8 @@ module SignalHouseSms
     # 409 DRAFT_CHANGED (publish again), and an incomplete draft 400 TEMPLATE_INVALID. Returns { head, version, warnings }.
     # A block whose text or image the Moderation API flags is an error with code CONTENT_POLICY_FLAGGED, whose message
     # names the category ("Content moderation flagged this text: spam"). The check passes when the Moderation API fails.
+    # An image URL with a variable is moderated at send instead, with its value filled in, and a refused image blocks
+    # the recipient with MODERATION.
     def publish(template_id:, group_id:, **opts)
       @client.require_params("templateId" => template_id, "groupId" => group_id)
       safe_id = CGI.escape(template_id.to_s)
@@ -160,7 +162,8 @@ module SignalHouseSms
 
     # POST /template/media (multipart: file, groupId)
     # file is an IO or a { filename:, io:, content_type: } hash; file_name names an IO part. Returns 201 with
-    # { mediaId, groupId, url, bytes, mimeType, kind, width, height, createdAt }.
+    # { mediaId, groupId, url, bytes, mimeType, kind, width, height, variants, createdAt }. An image over 1920 px or
+    # 5,000,000 bytes is stored compressed; variants.mms is the MMS copy of an image over the MMS size limit.
     def upload_media(group_id:, file:, file_name: nil, **opts)
       @client.require_params("groupId" => group_id, "file" => file)
       form_data = media_form(group_id, file, file_name)

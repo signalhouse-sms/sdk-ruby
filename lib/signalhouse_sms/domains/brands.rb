@@ -182,6 +182,15 @@ module SignalHouseSms
       @client.request("/brand/appeal/#{safe_brand_id}", method: :get, token: token, headers: headers)
     end
 
+    # GET /brand/feedback/:brandId (TCR identity feedback: why TCR could not verify the brand)
+    def get_brand_feedback(brand_id:, **opts)
+      @client.require_params("brandId" => brand_id)
+      token = opts[:token]
+      headers = HttpClient.headers_for(opts)
+      safe_brand_id = CGI.escape(brand_id.to_s)
+      @client.request("/brand/feedback/#{safe_brand_id}", method: :get, token: token, headers: headers)
+    end
+
     # POST /brand/appeal/:brandId (multipart)
     def submit_appeal(brand_id:, appeal_categories:, explanation:, file:, **opts)
       @client.require_params("brandId" => brand_id, "appealCategories" => appeal_categories, "explanation" => explanation, "file" => file)

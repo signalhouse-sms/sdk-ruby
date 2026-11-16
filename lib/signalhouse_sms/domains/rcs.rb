@@ -268,7 +268,7 @@ module SignalHouseSms
     # carriers are unknown and the default fees apply. The other arguments are as on send, but the fallback's from is
     # optional for an estimate; with none, the fallback leg is priced on the channel of the agent's linked campaign.
     # Returns { billingClass, segments, recipientCount, rcsLeg, fallbackLeg, totals, balance, issues, warnings }.
-    # rcsLeg.mediaSurcharge is the carrier's surcharge on media over 5 MB for one recipient, and rcsLeg.cost already holds it for every recipient; rcsLeg.cost is null with the fallback mode sms_only; a message over 100 MB adds a MEDIA_TOO_LARGE issue.
+    # rcsLeg.mediaSurcharge is the carrier's surcharge on media over 5 MB for one recipient, and rcsLeg.cost already holds it for every recipient; rcsLeg.cost is null with the fallback mode sms_only; a message over 100 MB adds a MEDIA_TOO_LARGE issue, and an external media URL that redirects adds a MEDIA_REDIRECT issue.
     def estimate(agent_id:, recipients: nil, recipient_count: nil, template_id: nil, template_version: nil, content: nil, content_format: nil,
                  traffic_type: nil, ttl_seconds: nil, expire_time: nil, fallback: nil, **opts)
       @client.require_params("agentId" => agent_id)
