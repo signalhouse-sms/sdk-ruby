@@ -33,14 +33,17 @@ module SignalHouseSms
     # developer.
     #
     # route_data keys (camelCase, as the API expects): routeAction (required;
-    # FORWARD|WEBRTC|SIP_TRUNK|SIP_PROFILE|CALL_CONTROL|AI|VOICEMAIL),
+    # FORWARD|WEBRTC|SIP_TRUNK|SIP_PROFILE|CALL_CONTROL|AI|VOICEMAIL|CALL_FLOW),
     # forwardToE164 (required for FORWARD, or the WEBRTC no-answer destination
     # when noAnswerAction is FORWARD), noAnswerAction (WEBRTC only:
     # VOICEMAIL|FORWARD|KEEP_RINGING, default VOICEMAIL), noAnswerSeconds (WEBRTC
     # only: 5-120, default 20), routeSipTrunkId (required for SIP_TRUNK),
     # routeSipProfileId (required for SIP_PROFILE), webhookUrl (SHML program URL;
     # required for CALL_CONTROL), routeAgentProfileId (AI agent profile id, AGP...;
-    # required for AI), recordingEnabled (bool).
+    # required for AI), routeCallFlowId (call flow in the number's subgroup;
+    # required for CALL_FLOW. It need not be published yet: until it is, calls
+    # fall through to the number's profile or subgroup settings), recordingEnabled
+    # (bool).
     # Returns { e164:, route: {...}, effective: {...} }.
     def set(e164:, route_data:, **opts)
       @client.require_params("e164" => e164, "routeData" => route_data)

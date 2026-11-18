@@ -315,6 +315,9 @@ BRANDS  (signal_house.brands)
       token: nil, headers: nil)
     Submit a brand identity status appeal with supporting documentation.
     Uses multipart/form-data automatically.
+    TCR refusal: a 4xx (e.g. TCR code 592, brand older than 45 days) returns
+      { error: "TCR refused the appeal: <reason>", details: { code, message } }
+      with TCR's own code and message. Retrying unchanged will be refused again.
     appeal_categories: array of strings (VERIFY_TAX_ID, VERIFY_NON_PROFIT, VERIFY_GOVERNMENT)
     explanation: string (max 1024 chars)
     file: File object (supported: .jpg, .jpeg, .png, .bmp, .raw, .tiff, .pdf, .docx, .htm, .odt, .rtf, .txt, .xml)
@@ -347,6 +350,57 @@ CAMPAIGNS  (signal_house.campaigns)
     Sends a POST to /campaign/nudge/:campaignId.
     No request body required.
     Returns 200: { message: "Nudge successful" }
+
+
+COMPLIANCE  (signal_house.compliance)
+--------------------------------------------------------------------------------
+  Compliance cases under /compliance. Signal House opens a case when a carrier
+  suspends one of your objects, a carrier escalates a message, or Signal House
+  needs something from you. You read your cases, answer their requirements and
+  upload files; only Signal House opens, works and closes them.
+
+  Number release closes that number's alerts immediately. Eligible cases have
+  closeReason NUMBER_RELEASED; shared cases stay open for other alerts,
+  requirements or review. Released blocks include numberReleasedAt without
+  inventing liftedAt.
+
+  get_cases(group_id: nil, status: nil, stage: nil, object_type: nil,
+      object_id: nil, subgroup_id: nil, suspended: nil, from: nil, to: nil,
+      sort: nil, page: nil, limit: nil, token: nil, headers: nil)
+    GET /compliance/cases. Your cases, newest first; sends only the filters
+    you pass. groupId defaults to your active group. status: OPEN,
+    LIFT_REQUESTED or CLOSED. stage: new, customer, ready, lift_requested or
+    closed. objectType: CAMPAIGN, BRAND, NUMBER, RCS_AGENT or SUBGROUP.
+    suspended: true for cases with an open suspension or hold, false for the
+    rest. from/to: ISO 8601 bounds on when the case opened. sort: createdAt
+    (default), fixBy or severity. limit: 1-200.
+    Returns { data, total, page, limit, totalPages,
+    counts: { open, waitingOnYou } }; waitingOnYou is the open cases with
+    requirements still to answer. Roles: api, admin, developer, billing, user.
+
+  get_case(case_id:, token: nil, headers: nil)
+    GET /compliance/cases/:caseId (CASE-...). Returns the case: its stage,
+    suspensions, tickets and requirements.
+    Roles: api, admin, developer, billing, user.
+
+  answer_requirement(case_id:, requirement_id:, answer: nil, file_ids: nil,
+      token: nil, headers: nil)
+    PUT /compliance/cases/:caseId/requirements/:requirementId. Answers one
+    requirement with a note (answer, up to 2,000 characters), files
+    (fileIds: up to 10 fileIds from upload_file, on this case), or both; the
+    body carries only the keys you pass. A RECORDS requirement needs a file or
+    a note. Returns the case. Roles: api, admin, developer, user.
+
+  upload_file(case_id:, file:, requirement_id: nil, token: nil, headers: nil)
+    POST /compliance/files (multipart/form-data). Fields: caseId, file, and
+    requirementId when given. file: { filename:, io:, content_type: }. CSV,
+    XLSX, PDF, PNG, JPG or TXT, up to 10 MB. Returns { fileId, fileName,
+    mimeType, size }; pass fileId in file_ids to answer_requirement.
+    Roles: api, admin, developer, user.
+
+  get_file(file_id:, token: nil, headers: nil)
+    GET /compliance/files/:fileId. Downloads the file; the bytes come back as
+    data["rawBody"]. Roles: api, admin, developer, billing, user.
 
 
 GROUPS  (signal_house.groups)

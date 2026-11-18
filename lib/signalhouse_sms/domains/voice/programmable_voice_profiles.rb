@@ -37,7 +37,7 @@ module SignalHouseSms
     # POST /voice/api/v1/programmable-voice-profiles
     #
     # Required: name, subgroupIds (array, at least one). Optional: region,
-    # routeAction (FORWARD|WEBRTC|SIP_TRUNK|SIP_PROFILE|CALL_CONTROL, default
+    # routeAction (FORWARD|WEBRTC|SIP_TRUNK|SIP_PROFILE|CALL_CONTROL|CALL_FLOW, default
     # FORWARD) — deliver to a PSTN number (FORWARD), ring the profile's subgroup
     # registered softphones (WEBRTC), send to a SIP trunk (SIP_TRUNK), ring a
     # registered SIP endpoint (SIP_PROFILE), or hand the call to your inbound
@@ -45,8 +45,9 @@ module SignalHouseSms
     # routeAction is FORWARD), routeSipTrunkId (required when routeAction is
     # SIP_TRUNK), routeSipProfileId (required when routeAction is SIP_PROFILE),
     # webhookUrl (inbound voice webhook / SHML program URL; required when
-    # routeAction is CALL_CONTROL), forwardAfterSeconds, recordingEnabled,
-    # enabled.
+    # routeAction is CALL_CONTROL), routeCallFlowId (call flow in one of the
+    # profile's subgroups; required when routeAction is CALL_FLOW),
+    # forwardAfterSeconds, recordingEnabled, enabled.
     # Returns { profile: {...} }.
     def create(profile_data:, **opts)
       @client.require_params("profileData" => profile_data)
@@ -57,11 +58,13 @@ module SignalHouseSms
     #
     # Partial update of an existing Programmable Voice Profile. Any create field
     # may be supplied: name, subgroupIds, region, routeAction
-    # (FORWARD|WEBRTC|SIP_TRUNK|SIP_PROFILE|CALL_CONTROL), forwardToE164,
+    # (FORWARD|WEBRTC|SIP_TRUNK|SIP_PROFILE|CALL_CONTROL|CALL_FLOW), forwardToE164,
     # routeSipTrunkId (required when routeAction is SIP_TRUNK),
     # routeSipProfileId (required when routeAction is SIP_PROFILE),
     # webhookUrl (inbound voice webhook / SHML program URL; required when
-    # routeAction is CALL_CONTROL), forwardAfterSeconds, recordingEnabled, enabled.
+    # routeAction is CALL_CONTROL), routeCallFlowId (required when routeAction
+    # is CALL_FLOW; must be in one of the profile's subgroups),
+    # forwardAfterSeconds, recordingEnabled, enabled.
     # Returns { profile: {...} }.
     def update(id:, update_data:, **opts)
       @client.require_params("id" => id, "updateData" => update_data)

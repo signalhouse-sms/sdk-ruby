@@ -9,6 +9,7 @@ require_relative "voice/call_logs"
 require_relative "voice/analytics"
 require_relative "voice/tokens"
 require_relative "voice/global_voice_settings"
+require_relative "voice/call_flows"
 
 module SignalHouseSms
   # Voice domain — wraps the Voice service (mounted under /voice).
@@ -18,6 +19,7 @@ module SignalHouseSms
   #   * client.voice.sip_profiles               — SIP profile / endpoint (single registerable UA)
   #   * client.voice.programmable_voice_profiles — Programmable Voice Profile (route a set of numbers through Signal House)
   #   * client.voice.number_routes              — Per-number inbound route (overrides the profile and subgroup settings)
+  #   * client.voice.call_flows                 — Call flows: customer-built call trees a number or profile can run
   #   * client.voice.calls                      — Outbound call origination + call log queries
   #   * client.voice.call_logs                  — Account-scoped voice call history (cost, recording, attribution)
   #   * client.voice.analytics                  — Aggregated call metrics (summary tiles + byDate/byNumber/byCarrier breakdowns)
@@ -25,7 +27,7 @@ module SignalHouseSms
   #   * client.voice.global_voice_settings      — Account-wide voice defaults (accepted regions, max spend/min, E911)
   class Voice
     attr_reader :sip_trunks, :sip_profiles, :programmable_voice_profiles, :number_routes, :calls, :call_logs, :analytics,
-                :tokens, :global_voice_settings
+                :tokens, :global_voice_settings, :call_flows
 
     def initialize(client, enable_admin)
       @sip_trunks = VoiceSipTrunks.new(client, enable_admin)
@@ -37,6 +39,7 @@ module SignalHouseSms
       @analytics = VoiceAnalytics.new(client, enable_admin)
       @tokens = VoiceTokens.new(client, enable_admin)
       @global_voice_settings = VoiceGlobalVoiceSettings.new(client, enable_admin)
+      @call_flows = VoiceCallFlows.new(client, enable_admin)
     end
   end
 end

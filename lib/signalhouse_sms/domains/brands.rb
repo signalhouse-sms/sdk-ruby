@@ -192,6 +192,9 @@ module SignalHouseSms
     end
 
     # POST /brand/appeal/:brandId (multipart)
+    # When TCR refuses the appeal itself (a 4xx, e.g. code 592 for a brand older than 45 days),
+    # the error body is { "error" => "TCR refused the appeal: <reason>", "details" => { "code", "message" } }
+    # with TCR's own code and message. Retrying unchanged is refused again.
     def submit_appeal(brand_id:, appeal_categories:, explanation:, file:, **opts)
       @client.require_params("brandId" => brand_id, "appealCategories" => appeal_categories, "explanation" => explanation, "file" => file)
       token = opts[:token]

@@ -255,6 +255,7 @@ client.users.admin.create_internal_user(
 | Brands | `client.brands` | `get_brands`, `get_external_vetting`, `create_brand`, `create_toll_free_brand`, `get_toll_free_requirements`, `transfer_brand`, `create_external_vetting`, `update_brand`, `revet_brand`, `delete_brand`, `get_caller_name`, `set_caller_name`, `delete_caller_name` |
 | Campaigns | `client.campaigns` | `get_campaigns`, `create_campaign`, `update_campaign`, `delete_campaign` |
 | Campaigns Admin | `client.campaigns.admin` | `approve_campaign`, `reject_campaign` |
+| Compliance | `client.compliance` | `get_cases`, `get_case`, `answer_requirement`, `upload_file`, `get_file` (Signal House opens, works and closes cases; you answer their requirements) |
 | Groups | `client.groups` | `get_group`, `update_group`, `get_sso_configuration`, `save_sso_connection`, `delete_sso_connection`, `add_sso_domain`, `verify_sso_domain`, `remove_sso_domain` |
 | Groups Admin | `client.groups.admin` | `get_groups`, `create_group`, `delete_group` |
 | Landings | `client.landings` | `get_landings`, `get_public_landing`, `create_landing`, `update_landing`, `get_landing_by_brand_id`, `delete_landing` |
