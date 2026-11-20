@@ -476,6 +476,7 @@ module SignalHouseSms
     end
 
     # POST /message/carrier-id
+    # An Australian number on ACMA's list of numbers reserved for TV, film and creative works is refused with a 400 as an invalid number, without a lookup or a charge.
     def carrier_id_lookup(phone_number:, **opts)
       @client.require_params("phoneNumber" => phone_number)
       token = opts[:token]

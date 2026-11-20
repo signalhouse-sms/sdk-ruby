@@ -256,7 +256,7 @@ client.users.admin.create_internal_user(
 | Campaigns | `client.campaigns` | `get_campaigns`, `create_campaign`, `update_campaign`, `delete_campaign` |
 | Campaigns Admin | `client.campaigns.admin` | `approve_campaign`, `reject_campaign` |
 | Compliance | `client.compliance` | `get_cases`, `get_case`, `answer_requirement`, `upload_file`, `get_file` (Signal House opens, works and closes cases; you answer their requirements) |
-| Groups | `client.groups` | `get_group`, `update_group`, `get_sso_configuration`, `save_sso_connection`, `delete_sso_connection`, `add_sso_domain`, `verify_sso_domain`, `remove_sso_domain` |
+| Groups | `client.groups` | `get_group`, `update_group`, `get_sso_configuration`, `save_sso_connection`, `delete_sso_connection`, `get_ontraport_connection`, `connect_ontraport`, `disconnect_ontraport`, `regenerate_ontraport_webhook_token`, `add_sso_domain`, `verify_sso_domain`, `remove_sso_domain` |
 | Groups Admin | `client.groups.admin` | `get_groups`, `create_group`, `delete_group` |
 | Landings | `client.landings` | `get_landings`, `get_public_landing`, `create_landing`, `update_landing`, `get_landing_by_brand_id`, `delete_landing` |
 | Messages | `client.messages` | `get_messages`, `get_analytics`, `send_sms`, `send_mms`, `send_group_message`, `get_p2p_batch` |

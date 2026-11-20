@@ -430,6 +430,29 @@ GROUPS  (signal_house.groups)
     Sends a DELETE to /group/sso?groupId=...
     Requires a fresh auth.confirm_two_factor_identity from the same session.
 
+  Both Ontraport methods require role admin, developer or signalhouse_admin,
+  reject an OAuth connector token, and return { connected, webhookUrl, enabled }.
+
+  get_ontraport_connection(group_id:, token: nil, headers: nil)
+    Get the group's Ontraport connection status and webhook URL. Never
+    returns the API Key or App ID.
+    Sends a GET to /group/ontraport?groupId=...
+
+  connect_ontraport(group_id:, api_key:, app_id:, token: nil, headers: nil)
+    Connect or reconnect the group's Ontraport account. api_key and app_id
+    are verified with Ontraport before anything is stored.
+    Sends a PUT to /group/ontraport with { groupId, apiKey, appId }.
+
+  disconnect_ontraport(group_id:, token: nil, headers: nil)
+    Disconnect (disable) the group's Ontraport account. Stored credentials
+    and contact links are kept, so reconnecting resumes cleanly.
+    Sends a DELETE to /group/ontraport?groupId=...
+
+  regenerate_ontraport_webhook_token(group_id:, token: nil, headers: nil)
+    Mint a fresh webhook token for an existing connection, immediately
+    invalidating the old URL.
+    Sends a PUT to /group/ontraport/regenerate-token with { groupId }.
+
   add_sso_domain(group_id:, domain:, token: nil, headers: nil)
     Claim an email domain for the group's SSO.
     Sends a POST to /group/sso/domains with { groupId, domain }.
@@ -536,6 +559,7 @@ MESSAGES  (signal_house.messages)
   carrier_id_lookup(phone_number:)
     Look up the carrier for a phone number.
     Always performs a fresh lookup (not cached). Billed per request.
+    An Australian number on ACMA's list of numbers reserved for TV, film and creative works is refused with a 400 as an invalid number, without a lookup or a charge.
     Required: phone_number (10+ digits, no + prefix)
     Returns: { phoneNumber, carrier, carrierFamily, carrierRegion, ported, type, degradedConfidence, cost }
 

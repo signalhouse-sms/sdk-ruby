@@ -61,6 +61,53 @@ module SignalHouseSms
       @client.request("/group/sso#{qs}", method: :delete, token: token, headers: headers)
     end
 
+    # GET /group/ontraport?groupId=...
+    # The group's Ontraport connection status: whether it's connected, the webhook URL to paste into an
+    # Ontraport automation's "Send to a Webhook" step, and whether it's enabled. Never returns the API Key or App ID.
+    def get_ontraport_connection(group_id:, **opts)
+      @client.require_params("groupId" => group_id)
+      token = opts[:token]
+      headers = HttpClient.headers_for(opts)
+      qs = @client.get_query_string(groupId: group_id)
+      @client.request("/group/ontraport#{qs}", method: :get, token: token, headers: headers)
+    end
+
+    # PUT /group/ontraport
+    # Connect (or reconnect) the group's Ontraport account. api_key and app_id are verified with a
+    # read-only call to Ontraport before anything is stored; a bad pair raises rather than saving.
+    # Requires a Signal House Admin to have enabled featureFlags.ontraportIntegration for the group
+    # first (opt-in, off by default) - otherwise this raises a validation error.
+    def connect_ontraport(group_id:, api_key:, app_id:, **opts)
+      @client.require_params("groupId" => group_id, "apiKey" => api_key, "appId" => app_id)
+      token = opts[:token]
+      headers = HttpClient.headers_for(opts)
+      body = { groupId: group_id, apiKey: api_key, appId: app_id }
+      @client.request("/group/ontraport", method: :put, body: body, token: token, headers: headers)
+    end
+
+    # DELETE /group/ontraport?groupId=...
+    # Disconnect (disable) the group's Ontraport account. The webhook stops accepting deliveries
+    # immediately; stored credentials and contact links are kept, so reconnecting the same account
+    # resumes cleanly. The primary self-service way to kill a leaked webhook URL.
+    def disconnect_ontraport(group_id:, **opts)
+      @client.require_params("groupId" => group_id)
+      token = opts[:token]
+      headers = HttpClient.headers_for(opts)
+      qs = @client.get_query_string(groupId: group_id)
+      @client.request("/group/ontraport#{qs}", method: :delete, token: token, headers: headers)
+    end
+
+    # PUT /group/ontraport/regenerate-token
+    # Mint a fresh webhook token for an existing Ontraport connection, immediately invalidating the
+    # old URL. A second self-service way to kill a leaked webhook URL, for when the customer wants to
+    # keep sending (unlike disconnect_ontraport) but needs a new URL to paste into a rebuilt automation.
+    def regenerate_ontraport_webhook_token(group_id:, **opts)
+      @client.require_params("groupId" => group_id)
+      token = opts[:token]
+      headers = HttpClient.headers_for(opts)
+      @client.request("/group/ontraport/regenerate-token", method: :put, body: { groupId: group_id }, token: token, headers: headers)
+    end
+
     # POST /group/sso/domains
     # Claim an email domain for the group's SSO. Returns the DNS TXT record to publish before verify_sso_domain.
     def add_sso_domain(group_id:, domain:, **opts)
