@@ -21,8 +21,10 @@ module SignalHouseSms
     # POST /voice/tokens
     #
     # All token_data fields are optional: identity (logical name; defaults to
-    # "anonymous"), ttl (seconds, clamped server-side), grants (capability
-    # grants). Returns { token, identity, expires_at, sip_credentials }.
+    # "anonymous"), ttl (seconds, clamped server-side), subgroupId (the subgroup
+    # whose inbound calls should ring this identity; required to receive calls
+    # and to register the device for mobile push via client.voice.push_devices),
+    # grants (capability grants). Returns { token, identity, expires_at, sip_credentials }.
     def create(token_data: {}, **opts)
       @client.request("/voice/tokens", method: :post, body: token_data || {}, token: opts[:token], headers: HttpClient.headers_for(opts))
     end

@@ -7,10 +7,13 @@ module SignalHouseSms
     end
 
     # GET /subgroup?...
-    def get_subgroups(id: nil, group_id: nil, page: nil, limit: nil, **opts)
+    # search (a String or an Array) narrows the list; every value must match, and each is sent as its own search key.
+    # A value is free text or "field:term", where field is subgroupId, subgroupName or subgroupCompanyName. Each term
+    # is 3 to 100 characters; at most 5 values.
+    def get_subgroups(id: nil, group_id: nil, page: nil, limit: nil, search: nil, **opts)
       token = opts[:token]
       headers = HttpClient.headers_for(opts)
-      qs = @client.get_query_string(id: id, groupId: group_id, page: page, limit: limit)
+      qs = @client.get_query_string(id: id, groupId: group_id, page: page, limit: limit, search: HttpClient.repeated(search))
       @client.request("/subgroup#{qs}", method: :get, token: token, headers: headers)
     end
 
@@ -57,7 +60,8 @@ module SignalHouseSms
     end
 
     # POST /subgroup
-    # subgroup_data may include optional carrierIdFamily and carrierIdRegion.
+    # subgroup_data may include carrierIdFamily and carrierIdRegion. Deprecated: accepted and stored, with
+    # no effect on billing.
     # Setting those fields requires signalhouse_api, signalhouse_admin, signalhouse_user,
     # api, admin, developer, or billing role.
     def create_subgroup(subgroup_data:, **opts)
@@ -68,7 +72,8 @@ module SignalHouseSms
     end
 
     # PUT /subgroup/:id
-    # update_data may include optional carrierIdFamily and carrierIdRegion.
+    # update_data may include carrierIdFamily and carrierIdRegion. Deprecated: accepted and stored, with
+    # no effect on billing.
     # Setting those fields requires signalhouse_api, signalhouse_admin, signalhouse_user,
     # api, admin, developer, or billing role.
     # update_data may also include cnamAutoApply (boolean; turns caller name auto-apply on or off, so

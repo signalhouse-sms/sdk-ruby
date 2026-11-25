@@ -299,6 +299,7 @@ module SignalHouseSms
     # GET /message/:messageId
     # One message by its ID; an unknown ID is a 404. The same route as messages.get_message. A settled RCS message carries
     # carrierFeeMicros, the carrier pass-through and media surcharge it was charged.
+    # An inbound RCS message also carries inReplyToMessageId: the message it answers, absent when there is none.
     def get(message_id:, **opts)
       @client.require_params("messageId" => message_id)
       safe_id = CGI.escape(message_id.to_s)

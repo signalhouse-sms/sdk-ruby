@@ -32,11 +32,14 @@ module SignalHouseSms
     # current toll-free carrier, the ones a new toll-free campaign in that group can use.
     # released: true, with subgroup_id or group_id, returns only its released numbers (status RELEASED) instead of
     # its active ones.
-    def get_phone_numbers(phone_number: nil, campaign_id: nil, registration_id: nil, brand_id: nil, subgroup_id: nil, group_id: nil, page: nil, limit: nil, current_toll_free_carrier: nil, released: nil, **opts)
+    # search (a String or an Array) narrows the list; every value must match, and each is sent as its own search key.
+    # A value is free text or "field:term", where field is phoneNumber or friendlyName; a phone-like term matches the
+    # number's digits. Each term is 3 to 100 characters; at most 5 values.
+    def get_phone_numbers(phone_number: nil, campaign_id: nil, registration_id: nil, brand_id: nil, subgroup_id: nil, group_id: nil, page: nil, limit: nil, current_toll_free_carrier: nil, released: nil, search: nil, **opts)
       token = opts[:token]
       headers = HttpClient.headers_for(opts)
       qs = @client.get_query_string(phoneNumber: phone_number, campaignId: campaign_id, registrationId: registration_id, brandId: brand_id, subgroupId: subgroup_id, groupId: group_id, page: page, limit: limit,
-                                    currentTollFreeCarrier: current_toll_free_carrier, released: released)
+                                    currentTollFreeCarrier: current_toll_free_carrier, released: released, search: HttpClient.repeated(search))
       @client.request("/number#{qs}", method: :get, token: token, headers: headers)
     end
 

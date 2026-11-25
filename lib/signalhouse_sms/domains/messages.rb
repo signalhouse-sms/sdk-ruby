@@ -40,6 +40,8 @@ module SignalHouseSms
     # Inbound messages in the response also carry sentimentScore (-100..100, nil when unscored),
     # sentimentLabel ("positive", "neutral" or "negative", nil when sentimentScore is nil) and
     # sentimentScoredAt. Outbound messages are never scored.
+    # Inbound messages also carry inReplyToMessageId: the message the reply answers, absent when there is none. If that
+    # message has a parentMessageId, it was an RCS fallback, and the parent is the RCS message you sent.
     # registration_id filters to messages attributed to these registrations (single value or array). It cannot be
     # combined with campaign_id, and each id must belong to the group.
     # date_bounds is which contract binds start_date/end_date. "day": each bound is widened to its whole UTC day
@@ -369,6 +371,7 @@ module SignalHouseSms
     # use_signal_house_shortlinks: optional boolean. When false, SignalHouse applies no
     # link-shortening or text-spin and your pre-spun links/content are sent verbatim
     # (bring-your-own spinner). Defaults to true. Pass nil to omit and keep the server default.
+    # @deprecated P2P messaging is retired and the API answers 410. This method will be removed in a future major release.
     def send_p2p(recipient_phone_numbers:, message_body:, status_callback_url: nil, group_id: nil, subgroup_id: nil, use_signal_house_shortlinks: nil, **opts)
       @client.require_params("recipientPhoneNumbers" => recipient_phone_numbers, "messageBody" => message_body)
       token = opts[:token]
@@ -388,6 +391,8 @@ module SignalHouseSms
     # One message of any type by its ID; an unknown ID is a 404. An outbound RCS message and its fallback leg also carry
     # costBreakdown, { legs: [{ messageId, channel, billed, billingClass, segments, baseMicros, carrierMicros, rated }] }, which is nil when it cannot be computed.
     # A settled RCS message also carries carrierFeeMicros: the carrier pass-through and media surcharge it was charged.
+    # Inbound messages also carry inReplyToMessageId: the message the reply answers, absent when there is none. If that
+    # message has a parentMessageId, it was an RCS fallback, and the parent is the RCS message you sent.
     def get_message(id:, **opts)
       @client.require_params("id" => id)
       token = opts[:token]
@@ -407,6 +412,7 @@ module SignalHouseSms
     end
 
     # GET /message/p2p/batches/:batchId
+    # @deprecated P2P messaging is retired and the API answers 410. This method will be removed in a future major release.
     def get_p2p_batch(batch_id:, **opts)
       @client.require_params("batchId" => batch_id)
       token = opts[:token]

@@ -206,9 +206,15 @@ BILLING  (signal_house.billing)
 BRANDS  (signal_house.brands)
 --------------------------------------------------------------------------------
   get_brands(id: nil, subgroup_id: nil, group_id: nil, page: nil,
-      limit: nil, status: nil, current_toll_free_carrier: nil, token: nil,
-      headers: nil)
+      limit: nil, status: nil, current_toll_free_carrier: nil, search: nil,
+      token: nil, headers: nil)
     List brands with filters.
+    search: a String or an Array; each value is sent as its own search key,
+    and every value must match. A value is free text or "field:term", where
+    field is brandId, displayName, companyName, ein, email, groupId,
+    subgroupId or referenceId. Free text matches brandId, displayName and
+    companyName on a group or subgroup read, and all eight fields on a staff
+    read of every brand. Each term is 3 to 100 characters; at most 5 values.
     current_toll_free_carrier: true, with group_id or subgroup_id, returns only
     toll-free brands on the group's current toll-free carrier, the ones a new
     toll-free campaign in that group can use.
@@ -326,9 +332,14 @@ BRANDS  (signal_house.brands)
 CAMPAIGNS  (signal_house.campaigns)
 --------------------------------------------------------------------------------
   get_campaigns(id: nil, brand_id: nil, subgroup_id: nil,
-      group_id: nil, page: nil, limit: nil, status: nil,
+      group_id: nil, page: nil, limit: nil, status: nil, search: nil,
       token: nil, headers: nil)
     List campaigns with filters.
+    search: a String or an Array; each value is sent as its own search key,
+    and every value must match. A value is free text or "field:term", where
+    field is campaignId or brandId. Free text matches campaignId, and also
+    brandId on a staff read of every campaign. Each term is 3 to 100
+    characters; at most 5 values.
 
   create_campaign(campaign_data:, token: nil, headers: nil)
     Create a new 10DLC campaign.
@@ -508,6 +519,10 @@ MESSAGES  (signal_house.messages)
     carrierMicros, rated }] }, which is null when it cannot be computed.
     A settled RCS message also carries carrierFeeMicros, the carrier
     pass-through and media surcharge it was charged.
+    Inbound messages also carry inReplyToMessageId: the message the reply
+    answers, absent when there is none. If that message has a
+    parentMessageId, it was an RCS fallback, and the parent is the RCS
+    message you sent.
 
   get_message_interactions(id:)
     GET /message/:id/interactions. The taps on one RCS message, oldest first. Required: id
@@ -582,7 +597,7 @@ NUMBERS  (signal_house.numbers)
   get_phone_numbers(phone_number: nil, campaign_id: nil,
       registration_id: nil, brand_id: nil, subgroup_id: nil, group_id: nil,
       page: nil, limit: nil, current_toll_free_carrier: nil, released: nil,
-      token: nil, headers: nil)
+      search: nil, token: nil, headers: nil)
     List your phone numbers with filters.
     registration_id: filter to numbers provisioned under this registration.
     current_toll_free_carrier: true, with group_id or subgroup_id, returns only
@@ -590,6 +605,10 @@ NUMBERS  (signal_house.numbers)
     toll-free campaign in that group can use.
     released: true, with subgroup_id or group_id, returns only its released
     numbers (status RELEASED) instead of its active ones.
+    search: a String or an Array; each value is sent as its own search key,
+    and every value must match. A value is free text or "field:term", where
+    field is phoneNumber or friendlyName; a phone-like term matches the
+    number's digits. Each term is 3 to 100 characters; at most 5 values.
 
   get_number_health(phone_number:, token: nil, headers: nil)
     Get the health score, the same one the portal shows, (1–10) for an owned phone number.
@@ -681,20 +700,24 @@ SHORTLINKS  (signal_house.shortlinks)
 
 SUBGROUPS  (signal_house.subgroups)
 --------------------------------------------------------------------------------
-  get_subgroups(id: nil, group_id: nil, page: nil, limit: nil,
+  get_subgroups(id: nil, group_id: nil, page: nil, limit: nil, search: nil,
       token: nil, headers: nil)
     List subgroups with filters.
+    search: a String or an Array; each value is sent as its own search key,
+    and every value must match. A value is free text or "field:term", where
+    field is subgroupId, subgroupName or subgroupCompanyName. Each term is 3
+    to 100 characters; at most 5 values.
 
   create_subgroup(subgroup_data:, token: nil, headers: nil)
     Create a new subgroup.
-    subgroup_data may include optional carrierIdFamily and carrierIdRegion.
-    Setting carrierIdFamily or carrierIdRegion requires signalhouse_api,
+    subgroup_data may include carrierIdFamily and carrierIdRegion. Deprecated: accepted and
+    stored, with no effect on billing. Setting them requires signalhouse_api,
     signalhouse_admin, signalhouse_user, api, admin, developer, or billing role.
 
   update_subgroup(id:, update_data:, token: nil, headers: nil)
     Update subgroup details.
-    update_data may include optional carrierIdFamily and carrierIdRegion.
-    Setting carrierIdFamily or carrierIdRegion requires signalhouse_api,
+    update_data may include carrierIdFamily and carrierIdRegion. Deprecated: accepted and
+    stored, with no effect on billing. Setting them requires signalhouse_api,
     signalhouse_admin, signalhouse_user, api, admin, developer, or billing role.
     update_data may also include cnamAutoApply (boolean) and cnamBrandId (string
     or nil) for caller name auto-apply. Setting them requires signalhouse_api,

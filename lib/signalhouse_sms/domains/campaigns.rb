@@ -35,10 +35,15 @@ module SignalHouseSms
     # `source` is CARRIER, UPSTREAM or BRAND (the carrier suspended the whole brand). A suspension applies to one
     # carrier, so `status` stays ACTIVE. Subscribe to the CAMPAIGN_SUSPENDED / CAMPAIGN_UNSUSPENDED webhook events
     # to be told when an entry opens or is lifted.
-    def get_campaigns(id: nil, brand_id: nil, subgroup_id: nil, group_id: nil, page: nil, limit: nil, status: nil, registration_type: nil, **opts)
+    #
+    # search (a String or an Array) narrows the list; every value must match, and each is sent as its own search key.
+    # A value is free text or "field:term", where field is campaignId or brandId. Free text matches campaignId, and
+    # also brandId on a staff read of every campaign. Each term is 3 to 100 characters; at most 5 values.
+    def get_campaigns(id: nil, brand_id: nil, subgroup_id: nil, group_id: nil, page: nil, limit: nil, status: nil, registration_type: nil, search: nil, **opts)
       token = opts[:token]
       headers = HttpClient.headers_for(opts)
-      qs = @client.get_query_string(id: id, brandId: brand_id, subgroupId: subgroup_id, groupId: group_id, page: page, limit: limit, status: status, registrationType: registration_type)
+      qs = @client.get_query_string(id: id, brandId: brand_id, subgroupId: subgroup_id, groupId: group_id, page: page, limit: limit, status: status, registrationType: registration_type,
+                                    search: HttpClient.repeated(search))
       @client.request("/campaign#{qs}", method: :get, token: token, headers: headers)
     end
 

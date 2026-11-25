@@ -10,6 +10,8 @@ require_relative "voice/analytics"
 require_relative "voice/tokens"
 require_relative "voice/global_voice_settings"
 require_relative "voice/call_flows"
+require_relative "voice/push_credentials"
+require_relative "voice/push_devices"
 
 module SignalHouseSms
   # Voice domain — wraps the Voice service (mounted under /voice).
@@ -25,9 +27,11 @@ module SignalHouseSms
   #   * client.voice.analytics                  — Aggregated call metrics (summary tiles + byDate/byNumber/byCarrier breakdowns)
   #   * client.voice.tokens                     — Mint ephemeral SIP credentials for the browser voice SDK
   #   * client.voice.global_voice_settings      — Account-wide voice defaults (accepted regions, max spend/min, E911)
+  #   * client.voice.push_credentials           — Mobile push: the Apple/Firebase credentials that wake your app for calls
+  #   * client.voice.push_devices               — Mobile push: register a device (called by the app with its voice token)
   class Voice
     attr_reader :sip_trunks, :sip_profiles, :programmable_voice_profiles, :number_routes, :calls, :call_logs, :analytics,
-                :tokens, :global_voice_settings, :call_flows
+                :tokens, :global_voice_settings, :call_flows, :push_credentials, :push_devices
 
     def initialize(client, enable_admin)
       @sip_trunks = VoiceSipTrunks.new(client, enable_admin)
@@ -40,6 +44,8 @@ module SignalHouseSms
       @tokens = VoiceTokens.new(client, enable_admin)
       @global_voice_settings = VoiceGlobalVoiceSettings.new(client, enable_admin)
       @call_flows = VoiceCallFlows.new(client, enable_admin)
+      @push_credentials = VoicePushCredentials.new(client, enable_admin)
+      @push_devices = VoicePushDevices.new(client, enable_admin)
     end
   end
 end

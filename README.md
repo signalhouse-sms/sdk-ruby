@@ -252,18 +252,18 @@ client.users.admin.create_internal_user(
 |--------|----------|---------|
 | Auth | `client.auth` | `login`, `reset_password`, `get_auth_history`, `get_oauth_links`, `create_oauth_link`, `create_oauth_reauth`, `confirm_oauth_reauth`, `confirm_oauth_link`, `delete_oauth_link`, `get_oauth_authorization_url` |
 | Billing | `client.billing` | `get_transaction_history`, `get_wallet`, `update_wallet`, `get_payment_methods`, `add_funds`, `add_payment_method`, `remove_payment_method`, `get_invoice_details`, `get_fees` |
-| Brands | `client.brands` | `get_brands`, `get_external_vetting`, `create_brand`, `create_toll_free_brand`, `get_toll_free_requirements`, `transfer_brand`, `create_external_vetting`, `update_brand`, `revet_brand`, `delete_brand`, `get_caller_name`, `set_caller_name`, `delete_caller_name` |
-| Campaigns | `client.campaigns` | `get_campaigns`, `create_campaign`, `update_campaign`, `delete_campaign` |
+| Brands | `client.brands` | `get_brands`, `get_external_vetting`, `create_brand`, `create_toll_free_brand`, `get_toll_free_requirements`, `transfer_brand`, `create_external_vetting`, `update_brand`, `revet_brand`, `delete_brand`, `get_caller_name`, `set_caller_name`, `delete_caller_name` (`get_brands` takes `search:`, one term or an Array of terms that must all match) |
+| Campaigns | `client.campaigns` | `get_campaigns`, `create_campaign`, `update_campaign`, `delete_campaign` (`get_campaigns` takes `search:`, one term or an Array of terms that must all match) |
 | Campaigns Admin | `client.campaigns.admin` | `approve_campaign`, `reject_campaign` |
 | Compliance | `client.compliance` | `get_cases`, `get_case`, `answer_requirement`, `upload_file`, `get_file` (Signal House opens, works and closes cases; you answer their requirements) |
 | Groups | `client.groups` | `get_group`, `update_group`, `get_sso_configuration`, `save_sso_connection`, `delete_sso_connection`, `get_ontraport_connection`, `connect_ontraport`, `disconnect_ontraport`, `regenerate_ontraport_webhook_token`, `add_sso_domain`, `verify_sso_domain`, `remove_sso_domain` |
 | Groups Admin | `client.groups.admin` | `get_groups`, `create_group`, `delete_group` |
 | Landings | `client.landings` | `get_landings`, `get_public_landing`, `create_landing`, `update_landing`, `get_landing_by_brand_id`, `delete_landing` |
-| Messages | `client.messages` | `get_messages`, `get_analytics`, `send_sms`, `send_mms`, `send_group_message`, `get_p2p_batch` |
+| Messages | `client.messages` | `get_messages`, `get_analytics`, `send_sms`, `send_mms`, `send_group_message`, `get_p2p_batch` (deprecated: P2P is retired and answers 410) |
 | Notifications | `client.notifications` | `get_notifications`, `update_notification_status`, `delete_notification` |
-| Numbers | `client.numbers` | `get_phone_numbers`, `get_number_health`, `get_available_phone_numbers`, `purchase_phone_number`, `update_phone_number`, `get_caller_name`, `set_caller_name`, `delete_caller_name`, `port_in_phone_number`, `assign_phone_number_to_campaign`, `unassign_phone_numbers_from_campaigns`, `delete_phone_numbers`, `transfer_phone_numbers`, `search_npa_nxx`, `lookup_locations` |
+| Numbers | `client.numbers` | `get_phone_numbers`, `get_number_health`, `get_available_phone_numbers`, `purchase_phone_number`, `update_phone_number`, `get_caller_name`, `set_caller_name`, `delete_caller_name`, `port_in_phone_number`, `assign_phone_number_to_campaign`, `unassign_phone_numbers_from_campaigns`, `delete_phone_numbers`, `transfer_phone_numbers`, `search_npa_nxx`, `lookup_locations` (`get_phone_numbers` takes `search:`, one term or an Array of terms that must all match) |
 | Shortlinks | `client.shortlinks` | `get_shortlink_redirect`, `get_shortlink` |
-| Subgroups | `client.subgroups` | `get_subgroups`, `create_subgroup`, `update_subgroup`, `delete_subgroup` |
+| Subgroups | `client.subgroups` | `get_subgroups`, `create_subgroup`, `update_subgroup`, `delete_subgroup` (`get_subgroups` takes `search:`, one term or an Array of terms that must all match) |
 | Subscriptions | `client.subscriptions` | `get_subscriptions`, `subscribe`, `unsubscribe` |
 | Subscriptions Admin | `client.subscriptions.admin` | `get_templates`, `create_template`, `update_template`, `delete_template`, `create_custom_subscription` |
 | Templates | `client.templates` | `create`, `list`, `get`, `update`, `publish`, `archive`, `versions`, `validate`, `capabilities`, `upload_media` |

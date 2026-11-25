@@ -26,14 +26,30 @@ module SignalHouseSms
       (opts[:headers] || {}).merge("Idempotency-Key" => key.to_s)
     end
 
+    # A query value that get_query_string sends as one key per element instead of one comma-joined key.
+    Repeated = Struct.new(:values)
+
+    # Mark a query value to be sent as one key per element, e.g. search=a&search=b.
+    #
+    # @param value [String, Array<String>, nil] One value or many
+    # @return [Repeated, nil] The marked values, or nil when value is nil so the key is left out
+    def self.repeated(value)
+      value.nil? ? nil : Repeated.new(Array(value))
+    end
+
     # Build a query string from a hash of parameters.
-    # Skips nil values. Arrays are joined with commas.
+    # Skips nil values. Arrays are joined with commas; a value from HttpClient.repeated sends one key per element.
     def get_query_string(params)
       return "" if params.nil? || params.empty?
 
       parts = []
       params.each do |key, value|
         next if value.nil?
+
+        if value.is_a?(Repeated)
+          value.values.each { |v| parts << "#{CGI.escape(key.to_s)}=#{CGI.escape(v.to_s)}" unless v.nil? }
+          next
+        end
 
         str_value = if value.is_a?(Array)
                       value.map { |v| CGI.escape(v.to_s) }.join(",")

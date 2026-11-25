@@ -18,11 +18,15 @@ module SignalHouseSms
     # Each toll-free brand carries tollFree.reviewsBusinessOnSubmit: whether it's reviewed when it's submitted and keeps
     # its business details from then on. A brand reviewed on submit also carries tollFree's businessStructure, industry,
     # contactEmail, contactJobTitle, contactJobLevel and rejectionReason (why it was rejected, or null).
-    def get_brands(id: nil, subgroup_id: nil, group_id: nil, page: nil, limit: nil, status: nil, registration_type: nil, current_toll_free_carrier: nil, **opts)
+    # search (a String or an Array) narrows the list; every value must match, and each is sent as its own search key.
+    # A value is free text or "field:term", where field is brandId, displayName, companyName, ein, email, groupId,
+    # subgroupId or referenceId. Free text matches brandId, displayName and companyName on a group or subgroup read,
+    # and all eight fields on a staff read of every brand. Each term is 3 to 100 characters; at most 5 values.
+    def get_brands(id: nil, subgroup_id: nil, group_id: nil, page: nil, limit: nil, status: nil, registration_type: nil, current_toll_free_carrier: nil, search: nil, **opts)
       token = opts[:token]
       headers = HttpClient.headers_for(opts)
       qs = @client.get_query_string(id: id, subgroupId: subgroup_id, groupId: group_id, page: page, limit: limit, status: status, registrationType: registration_type,
-                                    currentTollFreeCarrier: current_toll_free_carrier)
+                                    currentTollFreeCarrier: current_toll_free_carrier, search: HttpClient.repeated(search))
       @client.request("/brand#{qs}", method: :get, token: token, headers: headers)
     end
 
